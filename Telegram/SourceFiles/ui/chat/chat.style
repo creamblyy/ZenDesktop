@@ -324,7 +324,7 @@ historyInfoToast: Toast(defaultToast) {
 historyInfoToastIcon: icon {{ "toast/info", toastFg }};
 
 bubbleRadiusSmall: 8px;
-bubbleRadiusLarge: 22px;
+bubbleRadiusLarge: 24px;
 
 historyPhotoLeft: 14px;
 historyPhotoBubbleMinWidth: 200px;
@@ -679,8 +679,8 @@ reactionInlineSize: 18px;
 reactionInlineImage: 32px;
 reactionInlineSkip: 3px;
 reactionInlineTagSkip: 6px;
-reactionInlineTagLeftRadius: 6px;
-reactionInlineTagRightRadius: 3px;
+reactionInlineTagLeftRadius: 8px;
+reactionInlineTagRightRadius: 6px;
 reactionInlineTagArrow: 5px;
 reactionInlineTagDot: 5px;
 reactionInlineTagDotSkip: 2px;
