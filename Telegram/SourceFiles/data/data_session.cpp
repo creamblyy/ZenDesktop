@@ -28,6 +28,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "mtproto/mtproto_config.h"
 #include "tgw/tgw_storage.h"
 #include "wallet/wallet_session.h"
+#include "relay_hooks/relay_hooks.h"
 #include "wallet/wallet_transfer_messages.h"
 #include "window/notifications_manager.h"
 #include "history/history.h"
@@ -3370,6 +3371,14 @@ void Session::checkFormattedDateUpdates() {
 void Session::processMessagesDeleted(
 		PeerId peerId,
 		const QVector<MTPint> &data) {
+	auto messageIds = std::vector<int32_t>();
+	messageIds.reserve(data.size());
+	for (const auto &m : data) {
+		messageIds.push_back(m.v);
+	}
+	if (!Relay::RelayHooks::Instance().handleMessagesDeleted(peerId.value, messageIds)) {
+		return;
+	}
 	Tgw::ClearMessagesStorage(_session, peerId, data);
 	const auto list = messagesList(peerId);
 	const auto affected = historyLoaded(peerId);
@@ -3403,6 +3412,14 @@ void Session::processMessagesDeleted(
 }
 
 void Session::processNonChannelMessagesDeleted(const QVector<MTPint> &data) {
+	auto messageIds = std::vector<int32_t>();
+	messageIds.reserve(data.size());
+	for (const auto &m : data) {
+		messageIds.push_back(m.v);
+	}
+	if (!Relay::RelayHooks::Instance().handleNonChannelMessagesDeleted(messageIds)) {
+		return;
+	}
 	Tgw::ClearNonChannelStorage(_session, data);
 	auto toDestroy = std::vector<not_null<HistoryItem*>>();
 	auto historiesToCheck = base::flat_set<not_null<History*>>();

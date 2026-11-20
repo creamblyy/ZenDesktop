@@ -136,6 +136,11 @@ nice_target_sources(Telegram ${src_loc}
 PRIVATE
     ${style_files}
 
+    relay_hooks/relay_hooks.cpp
+    relay_hooks/relay_hooks.h
+    relay_hooks/zen_badges.cpp
+    relay_hooks/zen_badges.h
+
     api/api_attached_stickers.cpp
     api/api_attached_stickers.h
     api/api_authorizations.cpp
@@ -2014,6 +2019,8 @@ PRIVATE
     settings/sections/settings_active_sessions.h
     settings/sections/settings_advanced.cpp
     settings/sections/settings_advanced.h
+    settings/sections/settings_zen.cpp
+    settings/sections/settings_zen.h
     settings/sections/settings_chat.cpp
     settings/sections/settings_chat.h
     settings/sections/settings_blocked_peers.cpp

@@ -28,6 +28,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "main/main_session.h"
 #include "window/notifications_manager.h"
 #include "history/history.h"
+#include "relay_hooks/relay_hooks.h"
 #include "history/history_item.h"
 #include "history/history_item_components.h"
 #include "history/history_item_helpers.h"
@@ -754,6 +755,10 @@ void Histories::sendReadRequest(not_null<History*> history, State &state) {
 	DEBUG_LOG(("Reading: sending request now with till %1."
 		).arg(tillId.bare));
 	sendRequest(history, RequestType::ReadInbox, [=](Fn<void()> finish) {
+		if (!Relay::RelayHooks::Instance().handleReadHistory(history->peer->id.value, tillId.bare)) {
+			finish();
+			return mtpRequestId(0);
+		}
 		DEBUG_LOG(("Reading: sending request invoked with till %1."
 			).arg(tillId.bare));
 		const auto finished = [=] {

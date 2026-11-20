@@ -20,6 +20,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "ui/text/text_custom_emoji.h"
 #include "ui/unread_badge_paint.h"
 #include "styles/style_dialogs.h"
+#include "relay_hooks/zen_badges.h"
 
 namespace Ui {
 namespace {
@@ -251,12 +252,24 @@ int PeerBadge::drawGetWidth(Painter &p, Descriptor &&descriptor) {
 	Expects(descriptor.customEmojiRepaint != nullptr);
 
 	const auto peer = descriptor.peer;
+	auto zenBadgeAdvance = 0;
+	if (Relay::ZenBadges::Instance().hasBadge(peer->id.value)) {
+		zenBadgeAdvance = Relay::ZenBadges::Instance().drawBadge(
+			p,
+			descriptor.rectForName,
+			descriptor.nameWidth,
+			descriptor.outerWidth,
+			peer->id.value);
+		descriptor.rectForName.setWidth(descriptor.rectForName.width() - zenBadgeAdvance);
+		descriptor.nameWidth += zenBadgeAdvance;
+	}
+
 	if ((descriptor.scam && (peer->isScam() || peer->isFake()))
 		|| (descriptor.direct && peer->isMonoforum())) {
 		if (_emojiStatus) {
 			_emojiStatus->painted = false;
 		}
-		return drawTextBadge(p, descriptor);
+		return drawTextBadge(p, descriptor) + zenBadgeAdvance;
 	}
 	const auto verifyCheck = descriptor.verified && peer->isVerified();
 	const auto premiumMark = descriptor.premium
@@ -286,7 +299,7 @@ int PeerBadge::drawGetWidth(Painter &p, Descriptor &&descriptor) {
 		}
 		result += drawPremiumEmojiStatus(p, descriptor);
 		if (!paintVerify) {
-			return result;
+			return result + zenBadgeAdvance;
 		}
 		rectForName.setWidth(rectForName.width() + verifyWidth);
 		descriptor.nameWidth += result;
@@ -295,11 +308,11 @@ int PeerBadge::drawGetWidth(Painter &p, Descriptor &&descriptor) {
 	}
 	if (paintVerify) {
 		result += drawVerifyCheck(p, descriptor);
-		return result;
+		return result + zenBadgeAdvance;
 	} else if (paintStar) {
-		return drawPremiumStar(p, descriptor);
+		return drawPremiumStar(p, descriptor) + zenBadgeAdvance;
 	}
-	return 0;
+	return result + zenBadgeAdvance;
 }
 
 int PeerBadge::drawTextBadge(Painter &p, const Descriptor &descriptor) {

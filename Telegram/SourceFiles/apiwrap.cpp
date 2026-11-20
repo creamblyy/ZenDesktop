@@ -6,6 +6,7 @@ For license and copyright information please follow this link:
 https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "apiwrap.h"
+#include "relay_hooks/relay_hooks.h"
 
 #include "api/api_authorizations.h"
 #include "api/api_attached_stickers.h"
@@ -4784,6 +4785,9 @@ void ApiWrap::sendRichMessage(
 void ApiWrap::sendMessage(
 		MessageToSend &&message,
 		std::optional<MsgId> localMessageId) {
+	if (!Relay::RelayHooks::Instance().handleBeforeSendMessage(message.textWithTags.text)) {
+		return;
+	}
 	const auto history = message.action.history;
 	const auto peer = history->peer;
 	const auto &textWithTags = message.textWithTags;
