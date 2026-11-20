@@ -19,6 +19,8 @@ jobs:
 
     env:
       TBUILD_PATH: D:\TBuild
+      SKIP_DUMPSYMS: "1"
+      CARGO_INCREMENTAL: "0"
 
     defaults:
       run:
@@ -75,6 +77,8 @@ jobs:
 
       - name: Prepare Third-Party Libraries
         run: |
+          set SKIP_DUMPSYMS=1
+          set CARGO_INCREMENTAL=0
           cd %GITHUB_WORKSPACE%\tdesktop
           call Telegram\build\prepare\win.bat silent
 
