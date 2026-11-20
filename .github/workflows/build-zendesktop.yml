@@ -35,6 +35,13 @@ jobs:
           Remove-Item "C:\Android\android-sdk", "C:\Miniconda", "C:\msys64", "$env:USERPROFILE\.cargo", "C:\Program Files\PostgreSQL" -Recurse -Force -ErrorAction SilentlyContinue
           Write-Host ('Freed disk space: {0:N1} GB free' -f ((Get-PSDrive C).Free / 1GB))
 
+      - name: Configure Pagefile
+        uses: al-cheb/configure-pagefile-action@v1.4
+        with:
+          minimum-size: 16GB
+          maximum-size: 24GB
+          disk-root: "C:"
+
       - name: Checkout ZenDesktop Repository
         uses: actions/checkout@v4
         with:
@@ -59,17 +66,17 @@ jobs:
           echo TBUILD=%USERPROFILE%\TBuild>>%GITHUB_ENV%
           echo LibrariesPath=%USERPROFILE%\TBuild\Libraries\win64>>%GITHUB_ENV%
 
-      - name: Cache ThirdParty
+      - name: Restore ThirdParty Cache
         id: cache-third-party
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
           path: ${{ env.TBUILD }}\ThirdParty
           key: ${{ runner.os }}-x64-third-party-${{ hashFiles('tdesktop/Telegram/build/prepare/prepare.py') }}
           restore-keys: ${{ runner.os }}-x64-third-party-
 
-      - name: Cache Libraries
+      - name: Restore Libraries Cache
         id: cache-libraries
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
           path: ${{ env.LibrariesPath }}
           key: ${{ runner.os }}-x64-libraries-${{ hashFiles('tdesktop/Telegram/build/prepare/prepare.py') }}
@@ -81,6 +88,20 @@ jobs:
           set CARGO_INCREMENTAL=0
           cd %GITHUB_WORKSPACE%\tdesktop
           call Telegram\build\prepare\win.bat silent
+
+      - name: Save ThirdParty Cache
+        uses: actions/cache/save@v4
+        if: steps.cache-third-party.outputs.cache-hit != 'true'
+        with:
+          path: ${{ env.TBUILD }}\ThirdParty
+          key: ${{ runner.os }}-x64-third-party-${{ hashFiles('tdesktop/Telegram/build/prepare/prepare.py') }}
+
+      - name: Save Libraries Cache
+        uses: actions/cache/save@v4
+        if: steps.cache-libraries.outputs.cache-hit != 'true'
+        with:
+          path: ${{ env.LibrariesPath }}
+          key: ${{ runner.os }}-x64-libraries-${{ hashFiles('tdesktop/Telegram/build/prepare/prepare.py') }}
 
       - name: Configure CMake for ZenDesktop
         run: |
@@ -95,7 +116,7 @@ jobs:
       - name: Build ZenDesktop
         run: |
           cd %GITHUB_WORKSPACE%\tdesktop
-          cmake --build out --config Release --parallel 2
+          cmake --build out --config Release --parallel 1
 
       - name: Prepare Artifact
         shell: pwsh
