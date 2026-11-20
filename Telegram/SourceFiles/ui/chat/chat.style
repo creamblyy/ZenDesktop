@@ -22,7 +22,7 @@ msgDateFont: font(13px);
 msgMinWidth: 160px;
 msgPhotoSize: 33px;
 msgPhotoSkip: 40px;
-msgPadding: margins(11px, 8px, 11px, 8px);
+msgPadding: margins(14px, 10px, 14px, 10px);
 msgTagBadgePadding: margins(5px, -1px, 5px, 0px);
 msgTagBadgeBoostSkip: 2px;
 
@@ -49,7 +49,7 @@ tagInfoAdminsOnlyLabel: FlatLabel(defaultFlatLabel) {
 	}
 }
 
-msgMargin: margins(16px, 6px, 56px, 2px);
+msgMargin: margins(16px, 6px, 52px, 3px);
 msgMarginTopAttached: 0px;
 msgShadow: 2px;
 msgSelectionOffset: 30px;
@@ -92,8 +92,8 @@ msgReplyPadding: margins(6px, 6px, 11px, 6px);
 msgReplyBarPos: point(1px, 0px);
 msgReplyBarSize: size(2px, 36px);
 msgReplyBarSkip: 10px;
-msgServicePadding: margins(12px, 3px, 12px, 4px);
-msgServiceMargin: margins(10px, 10px, 10px, 2px);
+msgServicePadding: margins(16px, 5px, 16px, 6px);
+msgServiceMargin: margins(12px, 12px, 12px, 4px);
 monoforumBarUserpicSkip: 2px;
 
 msgDateSpace: 12px;
@@ -323,8 +323,8 @@ historyInfoToast: Toast(defaultToast) {
 }
 historyInfoToastIcon: icon {{ "toast/info", toastFg }};
 
-bubbleRadiusSmall: roundRadiusLarge;
-bubbleRadiusLarge: 16px;
+bubbleRadiusSmall: 8px;
+bubbleRadiusLarge: 22px;
 
 historyPhotoLeft: 14px;
 historyPhotoBubbleMinWidth: 200px;
@@ -376,8 +376,8 @@ HistoryFileLayout {
 	thumbSkip: pixels;
 }
 
-msgFileThumbRadiusSmall: 4px;
-msgFileThumbRadiusLarge: 12px;
+msgFileThumbRadiusSmall: 6px;
+msgFileThumbRadiusLarge: 16px;
 msgFileLayout: HistoryFileLayout {
 	padding: margins(12px, 8px, 10px, 8px);
 	nameTop: 12px;

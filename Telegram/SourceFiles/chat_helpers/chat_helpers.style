@@ -1292,11 +1292,11 @@ historyStashBubbleTravel: 4px;
 historyUnreadThingsSkip: 4px;
 
 historyQuoteStyle: QuoteStyle(defaultQuoteStyle) {
-	padding: margins(10px, 2px, 4px, 2px);
+	padding: margins(12px, 4px, 6px, 4px);
 	verticalSkip: 4px;
 	outline: 3px;
 	outlineShift: 2px;
-	radius: 5px;
+	radius: 8px;
 }
 historyTextStyle: TextStyle(defaultTextStyle) {
 	blockquote: QuoteStyle(historyQuoteStyle) {
