@@ -33,6 +33,8 @@ jobs:
           $before = (Get-PSDrive C).Free / 1GB
           Get-Service docker -ErrorAction SilentlyContinue | Stop-Service -ErrorAction SilentlyContinue
           Remove-Item "C:\Android\android-sdk", "C:\Miniconda", "C:\msys64", "$env:USERPROFILE\.cargo", "C:\Program Files\PostgreSQL" -Recurse -Force -ErrorAction SilentlyContinue
+          Set-CimInstance -Query "Select * from Win32_PageFileSetting" -Property @{InitialSize = 16384; MaximumSize = 24576} -ErrorAction SilentlyContinue
+          wmic pagefilesetting create name="C:\\pagefile.sys",initialsize=16384,maximumsize=24576 2>$null
           Write-Host ('Freed disk space: {0:N1} GB free' -f ((Get-PSDrive C).Free / 1GB))
 
       - name: Checkout ZenDesktop Repository
@@ -82,6 +84,20 @@ jobs:
           cd %GITHUB_WORKSPACE%\tdesktop
           call Telegram\build\prepare\win.bat silent
 
+      - name: Save Libraries Cache Immediately
+        uses: actions/cache/save@v4
+        if: always()
+        with:
+          path: ${{ env.LibrariesPath }}
+          key: ${{ runner.os }}-x64-libraries-${{ hashFiles('tdesktop/Telegram/build/prepare/prepare.py') }}
+
+      - name: Save ThirdParty Cache Immediately
+        uses: actions/cache/save@v4
+        if: always()
+        with:
+          path: ${{ env.TBUILD }}\ThirdParty
+          key: ${{ runner.os }}-x64-third-party-${{ hashFiles('tdesktop/Telegram/build/prepare/prepare.py') }}
+
       - name: Configure CMake for ZenDesktop
         run: |
           cd %GITHUB_WORKSPACE%\tdesktop\Telegram
@@ -95,7 +111,7 @@ jobs:
       - name: Build ZenDesktop
         run: |
           cd %GITHUB_WORKSPACE%\tdesktop
-          cmake --build out --config Release --parallel
+          cmake --build out --config Release --parallel 2
 
       - name: Prepare Artifact
         shell: pwsh

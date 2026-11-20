@@ -132,6 +132,9 @@ if (NOT DESKTOP_APP_DISABLE_SWIFT6)
 endif()
 
 target_precompile_headers(Telegram PRIVATE $<$<COMPILE_LANGUAGE:CXX,OBJCXX>:${src_loc}/stdafx.h>)
+if (MSVC)
+    target_compile_options(Telegram PRIVATE /Zm200)
+endif()
 nice_target_sources(Telegram ${src_loc}
 PRIVATE
     ${style_files}
@@ -2784,6 +2787,26 @@ PRIVATE
     langs/cloud_lang.strings
     numbers.txt
 )
+
+set(res_qrc_list
+    ${res_loc}/qrc/emoji_1.qrc
+    ${res_loc}/qrc/emoji_2.qrc
+    ${res_loc}/qrc/emoji_3.qrc
+    ${res_loc}/qrc/emoji_4.qrc
+    ${res_loc}/qrc/emoji_5.qrc
+    ${res_loc}/qrc/emoji_6.qrc
+    ${res_loc}/qrc/emoji_7.qrc
+    ${res_loc}/qrc/emoji_8.qrc
+    ${res_loc}/qrc/emoji_preview.qrc
+    ${res_loc}/qrc/telegram/animations.qrc
+    ${res_loc}/qrc/telegram/export.qrc
+    ${res_loc}/qrc/telegram/export_rich.qrc
+    ${res_loc}/qrc/telegram/picker.qrc
+    ${res_loc}/qrc/telegram/telegram.qrc
+    ${res_loc}/qrc/telegram/sounds.qrc
+    ${res_loc}/qrc/telegram/tgw.qrc
+)
+set_source_files_properties(${res_qrc_list} PROPERTIES SKIP_PRECOMPILE_HEADERS ON)
 
 include(cmake/qrhi_shaders.cmake)
 include(cmake/generate_models.cmake)
