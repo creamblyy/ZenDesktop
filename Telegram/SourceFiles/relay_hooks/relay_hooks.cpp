@@ -130,6 +130,42 @@ void RelayHooks::setShowPeerIdEnabled(bool enabled) {
 	saveSettings();
 }
 
+bool RelayHooks::isMaterial3BubblesEnabled() const {
+	return _material3Bubbles;
+}
+
+void RelayHooks::setMaterial3BubblesEnabled(bool enabled) {
+	_material3Bubbles = enabled;
+	saveSettings();
+}
+
+bool RelayHooks::isChatListDividersEnabled() const {
+	return _chatListDividers;
+}
+
+void RelayHooks::setChatListDividersEnabled(bool enabled) {
+	_chatListDividers = enabled;
+	saveSettings();
+}
+
+bool RelayHooks::isSmoothScrollEnabled() const {
+	return _smoothScroll;
+}
+
+void RelayHooks::setSmoothScrollEnabled(bool enabled) {
+	_smoothScroll = enabled;
+	saveSettings();
+}
+
+bool RelayHooks::isMaterial3IconsEnabled() const {
+	return _material3Icons;
+}
+
+void RelayHooks::setMaterial3IconsEnabled(bool enabled) {
+	_material3Icons = enabled;
+	saveSettings();
+}
+
 bool RelayHooks::isMessageDeleted(uint64_t peerId, int32_t messageId) const {
 	return _deletedMessages.contains(MakeMessageKey(peerId, messageId))
 		|| _deletedMessages.contains(MakeMessageKey(0, messageId));
@@ -185,6 +221,10 @@ void RelayHooks::loadSettings() {
 	_timeWithSeconds = s.value("time_with_seconds", false).toBool();
 	_greetingStickerDisabled = s.value("greeting_sticker_disabled", false).toBool();
 	_showPeerId = s.value("show_peer_id", true).toBool();
+	_material3Bubbles = s.value("material3_bubbles", true).toBool();
+	_chatListDividers = s.value("chat_list_dividers", true).toBool();
+	_smoothScroll = s.value("smooth_scroll", true).toBool();
+	_material3Icons = s.value("material3_icons", true).toBool();
 	_downloadBoost = s.value("download_boost", true).toBool();
 	_autoUpdateMode = static_cast<AutoUpdateMode>(s.value("auto_update_mode", 0).toInt());
 }
@@ -201,6 +241,10 @@ void RelayHooks::saveSettings() {
 	s.setValue("time_with_seconds", _timeWithSeconds);
 	s.setValue("greeting_sticker_disabled", _greetingStickerDisabled);
 	s.setValue("show_peer_id", _showPeerId);
+	s.setValue("material3_bubbles", _material3Bubbles);
+	s.setValue("chat_list_dividers", _chatListDividers);
+	s.setValue("smooth_scroll", _smoothScroll);
+	s.setValue("material3_icons", _material3Icons);
 	s.setValue("download_boost", _downloadBoost);
 	s.setValue("auto_update_mode", static_cast<int>(_autoUpdateMode));
 }
@@ -217,6 +261,10 @@ bool RelayHooks::exportSettings(const QString &filePath) const {
 	root["time_with_seconds"] = _timeWithSeconds;
 	root["greeting_sticker_disabled"] = _greetingStickerDisabled;
 	root["show_peer_id"] = _showPeerId;
+	root["material3_bubbles"] = _material3Bubbles;
+	root["chat_list_dividers"] = _chatListDividers;
+	root["smooth_scroll"] = _smoothScroll;
+	root["material3_icons"] = _material3Icons;
 	root["download_boost"] = _downloadBoost;
 	root["auto_update_mode"] = static_cast<int>(_autoUpdateMode);
 
@@ -249,6 +297,10 @@ bool RelayHooks::importSettings(const QString &filePath) {
 	if (obj.contains("time_with_seconds")) _timeWithSeconds = obj["time_with_seconds"].toBool();
 	if (obj.contains("greeting_sticker_disabled")) _greetingStickerDisabled = obj["greeting_sticker_disabled"].toBool();
 	if (obj.contains("show_peer_id")) _showPeerId = obj["show_peer_id"].toBool();
+	if (obj.contains("material3_bubbles")) _material3Bubbles = obj["material3_bubbles"].toBool();
+	if (obj.contains("chat_list_dividers")) _chatListDividers = obj["chat_list_dividers"].toBool();
+	if (obj.contains("smooth_scroll")) _smoothScroll = obj["smooth_scroll"].toBool();
+	if (obj.contains("material3_icons")) _material3Icons = obj["material3_icons"].toBool();
 	if (obj.contains("download_boost")) _downloadBoost = obj["download_boost"].toBool();
 	if (obj.contains("auto_update_mode")) _autoUpdateMode = static_cast<AutoUpdateMode>(obj["auto_update_mode"].toInt());
 
@@ -267,6 +319,10 @@ void RelayHooks::resetSettings() {
 	_timeWithSeconds = false;
 	_greetingStickerDisabled = false;
 	_showPeerId = true;
+	_material3Bubbles = true;
+	_chatListDividers = true;
+	_smoothScroll = true;
+	_material3Icons = true;
 	_downloadBoost = true;
 	_autoUpdateMode = AutoUpdateMode::DownloadOnly;
 	saveSettings();

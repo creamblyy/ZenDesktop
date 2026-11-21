@@ -61,7 +61,7 @@ public:
 	[[nodiscard]] bool isHidePhoneNumberEnabled() const;
 	void setHidePhoneNumberEnabled(bool enabled);
 
-	// Appearance
+	// Appearance & Material 3
 	[[nodiscard]] bool isTimeWithSecondsEnabled() const;
 	void setTimeWithSecondsEnabled(bool enabled);
 
@@ -70,6 +70,18 @@ public:
 
 	[[nodiscard]] bool isShowPeerIdEnabled() const;
 	void setShowPeerIdEnabled(bool enabled);
+
+	[[nodiscard]] bool isMaterial3BubblesEnabled() const;
+	void setMaterial3BubblesEnabled(bool enabled);
+
+	[[nodiscard]] bool isChatListDividersEnabled() const;
+	void setChatListDividersEnabled(bool enabled);
+
+	[[nodiscard]] bool isSmoothScrollEnabled() const;
+	void setSmoothScrollEnabled(bool enabled);
+
+	[[nodiscard]] bool isMaterial3IconsEnabled() const;
+	void setMaterial3IconsEnabled(bool enabled);
 
 	// Anti-Recall Visual State
 	[[nodiscard]] bool isMessageDeleted(uint64_t peerId, int32_t messageId) const;
@@ -125,6 +137,10 @@ private:
 	bool _timeWithSeconds = false;
 	bool _greetingStickerDisabled = false;
 	bool _showPeerId = true;
+	bool _material3Bubbles = true;
+	bool _chatListDividers = true;
+	bool _smoothScroll = true;
+	bool _material3Icons = true;
 	bool _downloadBoost = true; // Boost enabled by default
 	AutoUpdateMode _autoUpdateMode = AutoUpdateMode::DownloadOnly;
 

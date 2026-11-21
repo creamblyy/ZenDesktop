@@ -255,6 +255,64 @@ void ZenAppearance::setupContent() {
 		Relay::RelayHooks::Instance().setShowPeerIdEnabled(checked);
 	}, lifetime);
 
+	Ui::AddSkip(content);
+	Ui::AddDivider(content);
+	Ui::AddSkip(content);
+
+	Ui::AddSubsectionTitle(content, rpl::single(QString::fromUtf8("Стиль Material 3 & Анимации")));
+
+	const auto m3BubblesToggle = addCheckbox(
+		rpl::single(QString::fromUtf8("Material 3 скругления баблов (24px)")),
+		hooks.isMaterial3BubblesEnabled());
+
+	Ui::AddDividerText(
+		content,
+		rpl::single(QString::fromUtf8("Применяет мягкие скругления 24px для сообщений в стиле Material 3 Expressive.")));
+
+	m3BubblesToggle->checkedChanges(
+	) | rpl::on_next([=](bool checked) {
+		Relay::RelayHooks::Instance().setMaterial3BubblesEnabled(checked);
+	}, lifetime);
+
+	const auto dividersToggle = addCheckbox(
+		rpl::single(QString::fromUtf8("Разделители строк в списке чатов")),
+		hooks.isChatListDividersEnabled());
+
+	Ui::AddDividerText(
+		content,
+		rpl::single(QString::fromUtf8("Отображает тонкие адаптивные линии между диалогами в списке чатов для улучшения структуры.")));
+
+	dividersToggle->checkedChanges(
+	) | rpl::on_next([=](bool checked) {
+		Relay::RelayHooks::Instance().setChatListDividersEnabled(checked);
+	}, lifetime);
+
+	const auto m3IconsToggle = addCheckbox(
+		rpl::single(QString::fromUtf8("Контурные иконки Material 3")),
+		hooks.isMaterial3IconsEnabled());
+
+	Ui::AddDividerText(
+		content,
+		rpl::single(QString::fromUtf8("Включает современный контурный стиль иконок Material Symbols в системных меню.")));
+
+	m3IconsToggle->checkedChanges(
+	) | rpl::on_next([=](bool checked) {
+		Relay::RelayHooks::Instance().setMaterial3IconsEnabled(checked);
+	}, lifetime);
+
+	const auto smoothScrollToggle = addCheckbox(
+		rpl::single(QString::fromUtf8("Плавный скроллинг списков (Smooth Scroll)")),
+		hooks.isSmoothScrollEnabled());
+
+	Ui::AddDividerText(
+		content,
+		rpl::single(QString::fromUtf8("Мягкая кинетическая интерполяция при прокрутке колесиком мыши в списке чатов и сообщений.")));
+
+	smoothScrollToggle->checkedChanges(
+	) | rpl::on_next([=](bool checked) {
+		Relay::RelayHooks::Instance().setSmoothScrollEnabled(checked);
+	}, lifetime);
+
 	Ui::ResizeFitChild(this, content);
 }
 

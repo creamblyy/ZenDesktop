@@ -1,0 +1,601 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ZenDesktop // Badge Manager</title>
+    <style>
+        :root {
+            --bg: #0f1215;
+            --surface: #181c21;
+            --border: #293038;
+            --text-main: #f0f2f5;
+            --text-muted: #7e8b9b;
+            --accent-orange: #ff5e36;
+            --accent-blue: #3b82f6;
+            --accent-green: #10b981;
+            --rosette-bg: #656c73;
+            --font-mono: "JetBrains Mono", "SF Mono", Consolas, monospace;
+            --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            background-color: var(--bg);
+            color: var(--text-main);
+            font-family: var(--font-mono);
+            min-height: 100vh;
+            padding: 40px 24px;
+            display: flex;
+            justify-content: center;
+        }
+
+        .hud-container {
+            width: 100%;
+            max-width: 900px;
+            position: relative;
+        }
+
+        /* Swiss HUD brackets */
+        .hud-container::before {
+            content: "[ 01 · BADGE REGISTRY ]";
+            position: absolute;
+            top: -24px;
+            left: 0;
+            font-size: 11px;
+            letter-spacing: 2px;
+            color: var(--accent-orange);
+        }
+
+        .hud-container::after {
+            content: "SYS.VER // 2.4.0-RELAY";
+            position: absolute;
+            top: -24px;
+            right: 0;
+            font-size: 11px;
+            letter-spacing: 1px;
+            color: var(--text-muted);
+        }
+
+        .card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            padding: 32px;
+            position: relative;
+            margin-bottom: 24px;
+        }
+
+        .card-corner {
+            position: absolute;
+            width: 8px;
+            height: 8px;
+            border-color: var(--text-muted);
+            pointer-events: none;
+        }
+        .tl { top: -1px; left: -1px; border-top: 2px solid; border-left: 2px solid; }
+        .tr { top: -1px; right: -1px; border-top: 2px solid; border-right: 2px solid; }
+        .bl { bottom: -1px; left: -1px; border-bottom: 2px solid; border-left: 2px solid; }
+        .br { bottom: -1px; right: -1px; border-bottom: 2px solid; border-right: 2px solid; }
+
+        h1 {
+            font-size: 24px;
+            font-weight: 700;
+            letter-spacing: -0.5px;
+            margin-bottom: 8px;
+            color: var(--text-main);
+        }
+
+        .sub-desc {
+            font-size: 13px;
+            color: var(--text-muted);
+            margin-bottom: 24px;
+            line-height: 1.5;
+        }
+
+        .auth-bar {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 24px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .input-group {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            flex: 1;
+        }
+
+        label {
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--text-muted);
+        }
+
+        input, select {
+            background: #111417;
+            border: 1px solid var(--border);
+            color: var(--text-main);
+            padding: 12px 14px;
+            font-family: var(--font-mono);
+            font-size: 13px;
+            outline: none;
+            transition: border-color 0.15s ease;
+        }
+
+        input:focus, select:focus {
+            border-color: var(--accent-orange);
+        }
+
+        .form-grid {
+            display: grid;
+            grid-template-columns: 1.2fr 1fr 1fr;
+            gap: 16px;
+            margin-bottom: 20px;
+        }
+
+        .badge-radios {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 10px;
+            margin-bottom: 24px;
+        }
+
+        .badge-card {
+            border: 1px solid var(--border);
+            background: #111417;
+            padding: 14px 10px;
+            cursor: pointer;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 8px;
+            user-select: none;
+            transition: all 0.15s ease;
+        }
+
+        .badge-card:hover {
+            border-color: var(--text-muted);
+        }
+
+        .badge-card.active {
+            border-color: var(--accent-orange);
+            background: #1e1916;
+        }
+
+        .badge-icon-preview {
+            width: 32px;
+            height: 32px;
+        }
+
+        .badge-label {
+            font-size: 11px;
+            text-align: center;
+            font-weight: 600;
+        }
+
+        .btn {
+            background: var(--text-main);
+            color: #000;
+            border: none;
+            padding: 14px 24px;
+            font-family: var(--font-mono);
+            font-size: 13px;
+            font-weight: 700;
+            cursor: pointer;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            transition: all 0.15s ease;
+        }
+
+        .btn:hover {
+            background: var(--accent-orange);
+            color: #fff;
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .btn-danger {
+            background: transparent;
+            color: #ef4444;
+            border: 1px solid #ef4444;
+            padding: 6px 12px;
+            font-size: 11px;
+        }
+
+        .btn-danger:hover {
+            background: #ef4444;
+            color: #fff;
+        }
+
+        .status-box {
+            background: #111417;
+            border-left: 3px solid var(--accent-blue);
+            padding: 12px 16px;
+            font-size: 12px;
+            color: var(--text-muted);
+            margin-top: 16px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .status-box.success {
+            border-left-color: var(--accent-green);
+            color: var(--accent-green);
+        }
+
+        .status-box.error {
+            border-left-color: var(--accent-orange);
+            color: var(--accent-orange);
+        }
+
+        /* Registry table */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+            margin-top: 16px;
+        }
+
+        th {
+            text-align: left;
+            padding: 12px 14px;
+            background: #111417;
+            border-bottom: 1px solid var(--border);
+            font-size: 11px;
+            letter-spacing: 1px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+        }
+
+        td {
+            padding: 14px;
+            border-bottom: 1px solid var(--border);
+            vertical-align: middle;
+        }
+
+        tr:hover td {
+            background: #14181c;
+        }
+
+        .badge-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 4px 10px;
+            background: #20262c;
+            border: 1px solid var(--border);
+            font-size: 12px;
+        }
+
+        .badge-pill img {
+            width: 16px;
+            height: 16px;
+        }
+
+        .repo-meta {
+            font-size: 11px;
+            color: var(--text-muted);
+            margin-top: 4px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="hud-container">
+    <div class="card">
+        <div class="card-corner tl"></div><div class="card-corner tr"></div>
+        <div class="card-corner bl"></div><div class="card-corner br"></div>
+
+        <h1>ZENDESKTOP // BADGE DISPATCHER</h1>
+        <div class="sub-desc">
+            панель выдачи значков клиентам. изменения сразу коммитятся в репозиторий через GitHub API и подтягиваются всеми пользователями за 1–2 минуты.
+        </div>
+
+        <div class="auth-bar">
+            <div class="input-group" style="flex: 2;">
+                <label>Репозиторий (Owner/Repo)</label>
+                <input type="text" id="repoInput" value="creamblyy/ZenDesktop">
+            </div>
+            <div class="input-group" style="flex: 1;">
+                <label>Ветка</label>
+                <input type="text" id="branchInput" value="dev">
+            </div>
+            <div class="input-group" style="flex: 3;">
+                <label>GitHub Personal Token</label>
+                <input type="password" id="tokenInput" placeholder="ghp_..." value="">
+            </div>
+        </div>
+
+        <label style="margin-bottom: 8px; display: block;">1. Выбери тип значка:</label>
+        <div class="badge-radios" id="badgeSelector">
+            <div class="badge-card active" data-type="dev">
+                <svg class="badge-icon-preview" viewBox="0 0 24 24">
+                    <path d="M11.2227 4.03192C11.6432 3.58195 12.3568 3.58195 12.7773 4.03192L14.1956 5.54939C14.4054 5.77382 14.7019 5.89664 15.0089 5.88626L17.0848 5.81611C17.7003 5.7953 18.2049 6.29988 18.1841 6.91544L18.1139 8.99131C18.1036 9.29832 18.2264 9.59484 18.4508 9.80459L19.9683 11.2229C20.4182 11.6434 20.4182 12.357 19.9683 12.7775L18.4508 14.1958C18.2264 14.4056 18.1036 14.7021 18.1139 15.0091L18.1841 17.085C18.2049 17.7005 17.7003 18.2051 17.0848 18.1843L15.0089 18.1141C14.7019 18.1038 14.4054 18.2266 14.1956 18.451L12.7773 19.9685C12.3568 20.4184 11.6432 20.4184 11.2227 19.9685L9.80439 18.451C9.59464 18.2266 9.29813 18.1038 8.99111 18.1141L6.91524 18.1843C6.29969 18.2051 5.79511 17.7005 5.81591 17.085L5.88606 15.0091C5.89644 14.7021 5.77362 14.4056 5.54919 14.1958L4.03172 12.7775C3.58175 12.357 3.58175 11.6434 4.03172 11.2229L5.54919 9.80459C5.77362 9.59484 5.89644 9.29832 5.88606 8.99131L5.81591 6.91544C5.79511 6.29988 6.29968 5.7953 6.91524 5.81611L8.99111 5.88626C9.29813 5.89664 9.59464 5.77382 9.80439 5.54939L11.2227 4.03192Z" fill="#656c73"/>
+                    <path d="M8.2 9.0L11.3 12.0L8.2 15.0" fill="none" stroke="#FFFFFF" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+                    <path d="M12.8 15.0h3.0" stroke="#FFFFFF" stroke-width="1.4" stroke-linecap="round"/>
+                </svg>
+                <span class="badge-label">DEVELOPER</span>
+            </div>
+            <div class="badge-card" data-type="staff">
+                <svg class="badge-icon-preview" viewBox="0 0 24 24">
+                    <path d="M11.2227 4.03192C11.6432 3.58195 12.3568 3.58195 12.7773 4.03192L14.1956 5.54939C14.4054 5.77382 14.7019 5.89664 15.0089 5.88626L17.0848 5.81611C17.7003 5.7953 18.2049 6.29988 18.1841 6.91544L18.1139 8.99131C18.1036 9.29832 18.2264 9.59484 18.4508 9.80459L19.9683 11.2229C20.4182 11.6434 20.4182 12.357 19.9683 12.7775L18.4508 14.1958C18.2264 14.4056 18.1036 14.7021 18.1139 15.0091L18.1841 17.085C18.2049 17.7005 17.7003 18.2051 17.0848 18.1843L15.0089 18.1141C14.7019 18.1038 14.4054 18.2266 14.1956 18.451L12.7773 19.9685C12.3568 20.4184 11.6432 20.4184 11.2227 19.9685L9.80439 18.451C9.59464 18.2266 9.29813 18.1038 8.99111 18.1141L6.91524 18.1843C6.29969 18.2051 5.79511 17.7005 5.81591 17.085L5.88606 15.0091C5.89644 14.7021 5.77362 14.4056 5.54919 14.1958L4.03172 12.7775C3.58175 12.357 3.58175 11.6434 4.03172 11.2229L5.54919 9.80459C5.77362 9.59484 5.89644 9.29832 5.88606 8.99131L5.81591 6.91544C5.79511 6.29988 6.29968 5.7953 6.91524 5.81611L8.99111 5.88626C9.29813 5.89664 9.59464 5.77382 9.80439 5.54939L11.2227 4.03192Z" fill="#656c73"/>
+                    <path d="M12.8 6.5L8.5 12.4h3.3L11.0 17.5l5.0-6.4h-3.4l1.2-4.6z" fill="#FFFFFF"/>
+                </svg>
+                <span class="badge-label">STAFF</span>
+            </div>
+            <div class="badge-card" data-type="supporter">
+                <svg class="badge-icon-preview" viewBox="0 0 24 24">
+                    <path d="M11.2227 4.03192C11.6432 3.58195 12.3568 3.58195 12.7773 4.03192L14.1956 5.54939C14.4054 5.77382 14.7019 5.89664 15.0089 5.88626L17.0848 5.81611C17.7003 5.7953 18.2049 6.29988 18.1841 6.91544L18.1139 8.99131C18.1036 9.29832 18.2264 9.59484 18.4508 9.80459L19.9683 11.2229C20.4182 11.6434 20.4182 12.357 19.9683 12.7775L18.4508 14.1958C18.2264 14.4056 18.1036 14.7021 18.1139 15.0091L18.1841 17.085C18.2049 17.7005 17.7003 18.2051 17.0848 18.1843L15.0089 18.1141C14.7019 18.1038 14.4054 18.2266 14.1956 18.451L12.7773 19.9685C12.3568 20.4184 11.6432 20.4184 11.2227 19.9685L9.80439 18.451C9.59464 18.2266 9.29813 18.1038 8.99111 18.1141L6.91524 18.1843C6.29969 18.2051 5.79511 17.7005 5.81591 17.085L5.88606 15.0091C5.89644 14.7021 5.77362 14.4056 5.54919 14.1958L4.03172 12.7775C3.58175 12.357 3.58175 11.6434 4.03172 11.2229L5.54919 9.80459C5.77362 9.59484 5.89644 9.29832 5.88606 8.99131L5.81591 6.91544C5.79511 6.29988 6.29968 5.7953 6.91524 5.81611L8.99111 5.88626C9.29813 5.89664 9.59464 5.77382 9.80439 5.54939L11.2227 4.03192Z" fill="#656c73"/>
+                    <path d="M12 6.6c.4 3.0 2.4 5.0 5.4 5.4-3.0.4-5.0 2.4-5.4 5.4-.4-3.0-2.4-5.0-5.4-5.4 3.0-.4 5.0-2.4 5.4-5.4z" fill="#FFFFFF"/>
+                </svg>
+                <span class="badge-label">SUPPORTER</span>
+            </div>
+            <div class="badge-card" data-type="desktop">
+                <svg class="badge-icon-preview" viewBox="0 0 24 24">
+                    <path d="M11.2227 4.03192C11.6432 3.58195 12.3568 3.58195 12.7773 4.03192L14.1956 5.54939C14.4054 5.77382 14.7019 5.89664 15.0089 5.88626L17.0848 5.81611C17.7003 5.7953 18.2049 6.29988 18.1841 6.91544L18.1139 8.99131C18.1036 9.29832 18.2264 9.59484 18.4508 9.80459L19.9683 11.2229C20.4182 11.6434 20.4182 12.357 19.9683 12.7775L18.4508 14.1958C18.2264 14.4056 18.1036 14.7021 18.1139 15.0091L18.1841 17.085C18.2049 17.7005 17.7003 18.2051 17.0848 18.1843L15.0089 18.1141C14.7019 18.1038 14.4054 18.2266 14.1956 18.451L12.7773 19.9685C12.3568 20.4184 11.6432 20.4184 11.2227 19.9685L9.80439 18.451C9.59464 18.2266 9.29813 18.1038 8.99111 18.1141L6.91524 18.1843C6.29969 18.2051 5.79511 17.7005 5.81591 17.085L5.88606 15.0091C5.89644 14.7021 5.77362 14.4056 5.54919 14.1958L4.03172 12.7775C3.58175 12.357 3.58175 11.6434 4.03172 11.2229L5.54919 9.80459C5.77362 9.59484 5.89644 9.29832 5.88606 8.99131L5.81591 6.91544C5.79511 6.29988 6.29968 5.7953 6.91524 5.81611L8.99111 5.88626C9.29813 5.89664 9.59464 5.77382 9.80439 5.54939L11.2227 4.03192Z" fill="#656c73"/>
+                    <rect x="7.4" y="7.5" width="9.2" height="6.6" rx="1.2" fill="none" stroke="#FFFFFF" stroke-width="1.3"/>
+                    <path d="M12 14.1v2.0" stroke="#FFFFFF" stroke-width="1.3" stroke-linecap="round"/>
+                    <path d="M9.8 16.1h4.4" stroke="#FFFFFF" stroke-width="1.3" stroke-linecap="round"/>
+                </svg>
+                <span class="badge-label">CORE</span>
+            </div>
+        </div>
+
+        <div class="form-grid">
+            <div class="input-group">
+                <label>Telegram Peer ID</label>
+                <input type="text" id="peerIdInput" placeholder="например, 532137983 или -100...">
+            </div>
+            <div class="input-group">
+                <label>Кастомное название (title)</label>
+                <input type="text" id="titleInput" placeholder="например, Zen Developer">
+            </div>
+            <div class="input-group" style="justify-content: flex-end;">
+                <button class="btn" id="grantBtn" onclick="grantBadge()">
+                    <span>ВЫДАТЬ ЗНАЧОК</span> ➔
+                </button>
+            </div>
+        </div>
+
+        <div id="statusBox" class="status-box">
+            <span>READY // ожидание команд</span>
+            <span id="syncIndicator">SYNC: IDLE</span>
+        </div>
+    </div>
+
+    <!-- Live Registry Table -->
+    <div class="card">
+        <div class="card-corner tl"></div><div class="card-corner tr"></div>
+        <div class="card-corner bl"></div><div class="card-corner br"></div>
+
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+            <h2>ТЕКУЩИЙ РЕЕСТР ЗНАЧКОВ</h2>
+            <button class="btn" style="padding: 8px 16px; font-size: 11px;" onclick="loadRegistry()">
+                ОБНОВИТЬ СПИСОК
+            </button>
+        </div>
+        <div class="repo-meta">
+            Файл в репозитории: <code>Telegram/SourceFiles/relay_hooks/zen_badges.json</code>
+        </div>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>Telegram ID</th>
+                    <th>Значок</th>
+                    <th>Название</th>
+                    <th style="text-align: right;">Действие</th>
+                </tr>
+            </thead>
+            <tbody id="registryBody">
+                <tr>
+                    <td colspan="4" style="text-align: center; color: var(--text-muted);">Загрузка данных из GitHub...</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+    const FILE_PATH = "Telegram/SourceFiles/relay_hooks/zen_badges.json";
+    let currentSha = null;
+    let currentData = { badges: {} };
+    let selectedType = "dev";
+
+    // Setup badge selection cards
+    document.querySelectorAll('.badge-card').forEach(card => {
+        card.addEventListener('click', () => {
+            document.querySelectorAll('.badge-card').forEach(c => c.classList.remove('active'));
+            card.classList.add('active');
+            selectedType = card.dataset.type;
+
+            // Auto-fill default title
+            const titles = {
+                dev: "Zen Developer",
+                staff: "Zen Staff",
+                supporter: "Zen Supporter",
+                desktop: "Zen Core"
+            };
+            document.getElementById('titleInput').value = titles[selectedType] || "";
+        });
+    });
+
+    function setStatus(msg, type = "normal") {
+        const box = document.getElementById('statusBox');
+        const sync = document.getElementById('syncIndicator');
+        box.className = `status-box ${type}`;
+        box.querySelector('span:first-child').innerText = msg;
+        sync.innerText = `TIME: ${new Date().toLocaleTimeString()}`;
+    }
+
+    async function loadRegistry() {
+        const repo = document.getElementById('repoInput').value.trim();
+        const branch = document.getElementById('branchInput').value.trim();
+        const token = document.getElementById('tokenInput').value.trim();
+
+        setStatus("Загрузка реестра с GitHub...", "normal");
+
+        try {
+            const url = `https://api.github.com/repos/${repo}/contents/${FILE_PATH}?ref=${branch}`;
+            const res = await fetch(url, {
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Accept': 'application/vnd.github.v3+json'
+                }
+            });
+
+            if (!res.ok) {
+                throw new Error(`GitHub API error: ${res.status} ${res.statusText}`);
+            }
+
+            const json = await res.json();
+            currentSha = json.sha;
+
+            // Base64 decode utf-8
+            const rawContent = decodeURIComponent(escape(atob(json.content.replace(/\s/g, ''))));
+            currentData = JSON.parse(rawContent);
+
+            renderTable();
+            setStatus(`Синхронизировано (коммит sha: ${currentSha.slice(0, 7)})`, "success");
+        } catch (err) {
+            setStatus(`Ошибка загрузки: ${err.message}`, "error");
+        }
+    }
+
+    function renderTable() {
+        const tbody = document.getElementById('registryBody');
+        const badges = currentData.badges || {};
+        const entries = Object.entries(badges);
+
+        if (entries.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: var(--text-muted);">Реестр пуст</td></tr>`;
+            return;
+        }
+
+        tbody.innerHTML = entries.map(([peerId, item]) => {
+            const type = item.type || "desktop";
+            const title = item.title || "Zen Client";
+            return `
+                <tr>
+                    <td style="font-weight: 700; color: #fff;">${peerId}</td>
+                    <td>
+                        <span class="badge-pill">
+                            <strong>${type.toUpperCase()}</strong>
+                        </span>
+                    </td>
+                    <td>${title}</td>
+                    <td style="text-align: right;">
+                        <button class="btn btn-danger" onclick="revokeBadge('${peerId}')">ОТОЗВАТЬ</button>
+                    </td>
+                </tr>
+            `;
+        }).join('');
+    }
+
+    async function grantBadge() {
+        const peerId = document.getElementById('peerIdInput').value.trim();
+        const title = document.getElementById('titleInput').value.trim() || "Zen Member";
+
+        if (!peerId) {
+            alert("Введи Telegram ID");
+            return;
+        }
+
+        if (!currentSha) {
+            await loadRegistry();
+        }
+
+        const grantBtn = document.getElementById('grantBtn');
+        grantBtn.disabled = true;
+        setStatus(`Коммит в репозиторий: выдача [${selectedType}] для ${peerId}...`, "normal");
+
+        try {
+            // Update local memory data
+            if (!currentData.badges) currentData.badges = {};
+            currentData.badges[peerId] = {
+                type: selectedType,
+                title: title
+            };
+
+            await commitFileChange(`badges: grant ${selectedType} to ${peerId}`);
+
+            document.getElementById('peerIdInput').value = "";
+            renderTable();
+            setStatus(`Успешно. Значок выдан для ${peerId}. Клиенты обновятся за 1-2 минуты.`, "success");
+        } catch (err) {
+            setStatus(`Ошибка выдачи: ${err.message}`, "error");
+        } finally {
+            grantBtn.disabled = false;
+        }
+    }
+
+    async function revokeBadge(peerId) {
+        if (!confirm(`Отозвать значок у ${peerId}?`)) return;
+
+        setStatus(`Удаление значка у ${peerId}...`, "normal");
+        delete currentData.badges[peerId];
+
+        try {
+            await commitFileChange(`badges: revoke badge from ${peerId}`);
+            renderTable();
+            setStatus(`Значок у ${peerId} отозван.`, "success");
+        } catch (err) {
+            setStatus(`Ошибка отзыва: ${err.message}`, "error");
+        }
+    }
+
+    async function commitFileChange(commitMessage) {
+        const repo = document.getElementById('repoInput').value.trim();
+        const branch = document.getElementById('branchInput').value.trim();
+        const token = document.getElementById('tokenInput').value.trim();
+
+        const jsonString = JSON.stringify(currentData, null, 2);
+        const encodedContent = btoa(unescape(encodeURIComponent(jsonString)));
+
+        const url = `https://api.github.com/repos/${repo}/contents/${FILE_PATH}`;
+        const res = await fetch(url, {
+            method: 'PUT',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Accept': 'application/vnd.github.v3+json',
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                message: commitMessage,
+                content: encodedContent,
+                sha: currentSha,
+                branch: branch
+            })
+        });
+
+        if (!res.ok) {
+            const errJson = await res.json();
+            throw new Error(errJson.message || res.statusText);
+        }
+
+        const result = await res.json();
+        currentSha = result.content.sha;
+    }
+
+    // Initial load
+    loadRegistry();
+</script>
+
+</body>
+</html>

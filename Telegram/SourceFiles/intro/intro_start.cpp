@@ -24,8 +24,10 @@ StartWidget::StartWidget(
 	not_null<Data*> data)
 : Step(parent, account, data, true) {
 	setMouseTracking(true);
-	setTitleText(rpl::single(u"Telegram Desktop"_q));
-	setDescriptionText(tr::lng_intro_about());
+	setTitleText(rpl::single(u"ZenDesktop"_q));
+	setDescriptionText(rpl::single(QString::fromUtf8(
+		"Добро пожаловать в ZenDesktop для ПК.\n"
+		"Модифицированный быстрый и безопасный клиент.")));
 	show();
 }
 

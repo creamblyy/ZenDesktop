@@ -6,6 +6,7 @@ For license and copyright information please follow this link:
 https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "ui/chat/chat_style_radius.h"
+#include "relay_hooks/relay_hooks.h"
 #include "base/options.h"
 #include "ui/chat/message_bubble.h"
 
@@ -26,10 +27,16 @@ base::options::toggle UseSmallMsgBubbleRadius({
 const char kOptionUseSmallMsgBubbleRadius[] = "use-small-msg-bubble-radius";
 
 int BubbleRadiusSmall() {
+	if (Relay::RelayHooks::Instance().isMaterial3BubblesEnabled()) {
+		return st::bubbleRadiusSmall * 3 / 2;
+	}
 	return st::bubbleRadiusSmall;
 }
 
 int BubbleRadiusLarge() {
+	if (Relay::RelayHooks::Instance().isMaterial3BubblesEnabled()) {
+		return 24;
+	}
 	static const auto result = [] {
 		if (UseSmallMsgBubbleRadius.value()) {
 			return st::bubbleRadiusSmall;

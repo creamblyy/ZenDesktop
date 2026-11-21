@@ -434,6 +434,23 @@ void Step::prepareCoverMask() {
 
 void Step::paintCover(QPainter &p, int top) {
 	auto coverHeight = top + st::introCoverHeight;
+	if (coverHeight <= 0) {
+		return;
+	}
+
+	static const auto banner = QImage(u":/gui/art/intro_banner.png"_q);
+	if (!banner.isNull()) {
+		const auto sx = std::max(0, (banner.width() - width() * banner.height() / st::introCoverHeight) / 2);
+		const auto sw = std::min(banner.width(), width() * banner.height() / st::introCoverHeight);
+		const auto sy = -top * banner.height() / st::introCoverHeight;
+		const auto sh = coverHeight * banner.height() / st::introCoverHeight;
+		p.drawImage(
+			QRect(0, 0, width(), coverHeight),
+			banner,
+			QRect(sx, sy, sw, sh));
+		return;
+	}
+
 	if (coverHeight > 0) {
 		p.drawPixmap(
 			QRect(0, 0, width(), coverHeight),

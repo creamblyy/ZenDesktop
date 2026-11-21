@@ -7,6 +7,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "dialogs/ui/dialogs_layout.h"
 
+#include "relay_hooks/relay_hooks.h"
 #include "base/options.h"
 #include "base/unixtime.h"
 #include "core/ui_integration.h"
@@ -1070,6 +1071,20 @@ void PaintRow(
 		}
 		if (quick->rippleFg->empty()) {
 			quick->rippleFg.reset();
+		}
+	}
+	if (Relay::RelayHooks::Instance().isChatListDividersEnabled()) {
+		const auto dividerLeft = context.narrow
+			? geometry.x()
+			: (geometry.x() + context.st->padding.left() + context.st->photoSize + context.st->padding.left());
+		const auto dividerWidth = geometry.width() - (dividerLeft - geometry.x());
+		if (dividerWidth > 0 && !context.active) {
+			p.fillRect(
+				dividerLeft,
+				geometry.y() + geometry.height() - st::lineWidth,
+				dividerWidth,
+				st::lineWidth,
+				st::dialogsBgOver);
 		}
 	}
 }
