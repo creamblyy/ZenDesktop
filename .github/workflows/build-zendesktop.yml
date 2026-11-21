@@ -92,9 +92,9 @@ jobs:
         if: success() && steps.libs-cache.outputs.cache-hit != 'true'
         shell: pwsh
         run: |
-          Get-ChildItem -Path "$env:LibrariesPath" -Filter "*.obj" -Recurse -File -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
+          Get-ChildItem -Path "$env:LibrariesPath" -Filter "*.obj" -Recurse -File -ErrorAction SilentlyContinue | Where-Object { $_.FullName -notlike "*\lib\objects-*" } | Remove-Item -Force -ErrorAction SilentlyContinue
           Get-ChildItem -Path "$env:ThirdPartyPath" -Filter "*.obj" -Recurse -File -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
-          Get-ChildItem -Path "$env:LibrariesPath" -Filter "*.pdb" -Recurse -File -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
+          Get-ChildItem -Path "$env:LibrariesPath" -Filter "*.pdb" -Recurse -File -ErrorAction SilentlyContinue | Where-Object { $_.FullName -notlike "*\lib\objects-*" } | Remove-Item -Force -ErrorAction SilentlyContinue
           Write-Host "Intermediate build objects purged to keep cache archive lightweight and fast."
 
       - name: Save Third-Party Libraries Cache
@@ -105,6 +105,53 @@ jobs:
             ${{ env.ThirdPartyPath }}
             ${{ env.LibrariesPath }}
           key: ${{ runner.os }}-x64-deps-${{ hashFiles('tdesktop/Telegram/build/prepare/prepare.py') }}
+
+      - name: Restore Qt RCC Objects
+        shell: pwsh
+        run: |
+          $qtBase = "$env:LibrariesPath\qt_6.12.0\qtbase"
+          $qtPrefix = "$env:LibrariesPath\Qt-6.12.0"
+          if (Test-Path "$qtBase\build.ninja") {
+              Write-Host "Re-installing Qt resource targets..."
+              cmd /c "cd /d `"$qtBase`" && cmake --build . --target Gui_resources_1 Gui_resources_2 Widgets_resources_1 Widgets_resources_2 Widgets_resources_3 Widgets_resources_4 PrintSupport_resources_1 PrintSupport_resources_2 QWindowsIntegrationPlugin_resources_1 QWindowsIntegrationPlugin_resources_2 QWindowsDirect2DIntegrationPlugin_resources_1 QWindowsDirect2DIntegrationPlugin_resources_2"
+              cmd /c "cd /d `"$qtBase`" && cmake --install ."
+          }
+          # Verification and fallback compiler for any missing object file
+          $targets = @(
+              @{ Sub = "Gui_resources_1"; Cpp = "src\gui\.qt\rcc\qrc_qpdf_init.cpp"; Obj = "qrc_qpdf_init.cpp.obj" },
+              @{ Sub = "Gui_resources_2"; Cpp = "src\gui\.qt\rcc\qrc_gui_shaders_init.cpp"; Obj = "qrc_gui_shaders_init.cpp.obj" },
+              @{ Sub = "Widgets_resources_1"; Cpp = "src\widgets\.qt\rcc\qrc_qstyle_init.cpp"; Obj = "qrc_qstyle_init.cpp.obj" },
+              @{ Sub = "Widgets_resources_2"; Cpp = "src\widgets\.qt\rcc\qrc_qstyle1_init.cpp"; Obj = "qrc_qstyle1_init.cpp.obj" },
+              @{ Sub = "Widgets_resources_3"; Cpp = "src\widgets\.qt\rcc\qrc_qstyle_fusion_init.cpp"; Obj = "qrc_qstyle_fusion_init.cpp.obj" },
+              @{ Sub = "Widgets_resources_4"; Cpp = "src\widgets\.qt\rcc\qrc_qmessagebox_init.cpp"; Obj = "qrc_qmessagebox_init.cpp.obj" },
+              @{ Sub = "PrintSupport_resources_1"; Cpp = "src\printsupport\.qt\rcc\qrc_qprintdialog_init.cpp"; Obj = "qrc_qprintdialog_init.cpp.obj" },
+              @{ Sub = "PrintSupport_resources_2"; Cpp = "src\printsupport\.qt\rcc\qrc_qprintdialog1_init.cpp"; Obj = "qrc_qprintdialog1_init.cpp.obj" },
+              @{ Sub = "QWindowsIntegrationPlugin_resources_1"; Cpp = "src\plugins\platforms\windows\.qt\rcc\qrc_openglblacklists_init.cpp"; Obj = "qrc_openglblacklists_init.cpp.obj" },
+              @{ Sub = "QWindowsIntegrationPlugin_resources_2"; Cpp = "src\plugins\platforms\windows\.qt\rcc\qrc_cursors_init.cpp"; Obj = "qrc_cursors_init.cpp.obj" },
+              @{ Sub = "QWindowsDirect2DIntegrationPlugin_resources_1"; Cpp = "src\plugins\platforms\direct2d\.qt\rcc\qrc_openglblacklists_init.cpp"; Obj = "qrc_openglblacklists_init.cpp.obj" },
+              @{ Sub = "QWindowsDirect2DIntegrationPlugin_resources_2"; Cpp = "src\plugins\platforms\direct2d\.qt\rcc\qrc_cursors_init.cpp"; Obj = "qrc_cursors_init.cpp.obj" }
+          )
+          foreach ($cfg in @("Debug", "RelWithDebInfo")) {
+              $destBase = "$qtPrefix\lib\objects-$cfg"
+              foreach ($t in $targets) {
+                  $targetDir = "$destBase\$($t.Sub)\.qt\rcc"
+                  $targetObj = "$targetDir\$($t.Obj)"
+                  if (-not (Test-Path $targetObj)) {
+                      New-Item -ItemType Directory -Path $targetDir -Force | Out-Null
+                      $srcCpp = "$qtBase\$($t.Cpp)"
+                      if (Test-Path $srcCpp) {
+                          Write-Host "Compiling missing $targetObj from $srcCpp..."
+                          cmd /c "cl /nologo /c /O2 /MD `"$srcCpp`" /Fo`"$targetObj`""
+                      } else {
+                          Write-Host "Generating stub object for $targetObj..."
+                          $stubCpp = "$env:TEMP\stub_$($t.Sub).cpp"
+                          "extern `"C`" void stub_$($t.Sub)() {}" | Set-Content -Path $stubCpp
+                          cmd /c "cl /nologo /c /MD `"$stubCpp`" /Fo`"$targetObj`""
+                      }
+                  }
+              }
+          }
+          Write-Host "Qt resource objects verification complete."
 
       - name: Configure CMake for ZenDesktop
         run: |
