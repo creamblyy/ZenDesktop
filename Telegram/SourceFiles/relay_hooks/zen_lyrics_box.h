@@ -4,12 +4,17 @@ This file is part of Telegram Desktop fork - ZenDesktop with RelayHooks.
 #pragma once
 
 #include "ui/layers/box_content.h"
+#include "media/audio/media_audio.h"
 #include <QtNetwork/QNetworkAccessManager>
 #include <QtNetwork/QNetworkReply>
 
 namespace Window {
 class SessionController;
 } // namespace Window
+
+namespace Data {
+class DocumentMedia;
+} // namespace Data
 
 namespace Relay {
 
@@ -31,6 +36,7 @@ protected:
 
 private:
 	void setupContent();
+	void handleTrackChange();
 	void fetchLyrics(const QString &title, const QString &performer);
 	void parseLrc(const QString &lrc);
 	void parsePlain(const QString &plain, float64 duration);
@@ -46,6 +52,8 @@ private:
 	int _activeLineIdx = -1;
 	bool _autoScroll = true;
 
+	AudioMsgId _currentAudioId;
+	std::shared_ptr<Data::DocumentMedia> _coverMedia;
 	QString _currentTitle;
 	QString _currentPerformer;
 	float64 _duration = 0.;
@@ -64,7 +72,11 @@ private:
 	Ui::RpWidget *_progressBar = nullptr;
 	Ui::FlatLabel *_elapsedLabel = nullptr;
 	Ui::FlatLabel *_remainingLabel = nullptr;
-	Ui::IconButton *_playBtn = nullptr;
+	Ui::RpWidget *_playBtn = nullptr;
+	Ui::IconButton *_shuffleBtn = nullptr;
+	Ui::IconButton *_repeatBtn = nullptr;
+	Ui::IconButton *_scrollLockBtn = nullptr;
+	Ui::IconButton *_copyBtn = nullptr;
 };
 
 } // namespace Relay
