@@ -129,12 +129,9 @@ void Zen::setupContent() {
 			.arg(s.messagesModified);
 	};
 
-	const auto statsLabel = content->add(
-		object_ptr<Ui::FlatLabel>(
-			content,
-			rpl::single(formatStats()),
-			st::settingsDividerLabel),
-		st::settingsCheckboxPadding);
+	const auto statsLabel = Ui::AddDividerText(
+		content,
+		rpl::single(formatStats()));
 
 	const auto resetButton = AddButtonWithIcon(
 		content,

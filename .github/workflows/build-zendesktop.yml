@@ -61,16 +61,16 @@ jobs:
 
       - name: Setup TBuild Directories
         run: |
-          mkdir %USERPROFILE%\TBuild\Libraries
-          mkdir %USERPROFILE%\TBuild\ThirdParty
-          echo TBUILD=%USERPROFILE%\TBuild>>%GITHUB_ENV%
-          echo LibrariesPath=%USERPROFILE%\TBuild\Libraries\win64>>%GITHUB_ENV%
+          mkdir %GITHUB_WORKSPACE%\Libraries\win64
+          mkdir %GITHUB_WORKSPACE%\ThirdParty
+          echo LibrariesPath=%GITHUB_WORKSPACE%\Libraries\win64>>%GITHUB_ENV%
+          echo ThirdPartyPath=%GITHUB_WORKSPACE%\ThirdParty>>%GITHUB_ENV%
 
       - name: Restore ThirdParty Cache
         id: cache-third-party
         uses: actions/cache/restore@v4
         with:
-          path: ${{ env.TBUILD }}\ThirdParty
+          path: ${{ env.ThirdPartyPath }}
           key: ${{ runner.os }}-x64-third-party-${{ hashFiles('tdesktop/Telegram/build/prepare/prepare.py') }}
           restore-keys: ${{ runner.os }}-x64-third-party-
 
@@ -93,7 +93,7 @@ jobs:
         uses: actions/cache/save@v4
         if: steps.cache-third-party.outputs.cache-hit != 'true'
         with:
-          path: ${{ env.TBUILD }}\ThirdParty
+          path: ${{ env.ThirdPartyPath }}
           key: ${{ runner.os }}-x64-third-party-${{ hashFiles('tdesktop/Telegram/build/prepare/prepare.py') }}
 
       - name: Save Libraries Cache

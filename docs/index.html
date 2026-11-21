@@ -1,0 +1,915 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ZenDesktop · Private Telegram Desktop Fork</title>
+  <style>
+    :root {
+      /* color-system flyheat */
+      --signal-orange: #ff5a36;
+      --electric-blue: #2b3cff;
+      --cream: #f4efe6;
+      --near-black: #0e0e10;
+      --graphite: #20252b;
+      --tar: #1a1c1e;
+      --iron: #4a4e54;
+      --chrome: #bfc4c7;
+      --concrete: #8c9199;
+      --rosette-slate: #656c73;
+
+      --font-grotesque: 'Arial Black', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      --font-serif: Georgia, 'Times New Roman', serif;
+      --font-mono: 'Consolas', 'Menlo', 'Courier New', monospace;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background-color: var(--near-black);
+      color: var(--cream);
+      font-family: var(--font-mono);
+      font-size: 13px;
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+      overflow-x: hidden;
+    }
+
+    a {
+      color: inherit;
+      text-decoration: none;
+    }
+
+    /* Technical HUD Bar */
+    .hud-bar {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px 24px;
+      background-color: rgba(14, 14, 16, 0.95);
+      border-bottom: 1px solid var(--graphite);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    .hud-left {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      background-color: var(--signal-orange);
+      display: inline-block;
+    }
+
+    .hud-links {
+      display: flex;
+      gap: 20px;
+    }
+
+    .hud-link {
+      color: var(--concrete);
+      transition: color 0.15s;
+    }
+
+    .hud-link:hover {
+      color: var(--cream);
+    }
+
+    .hud-tag {
+      padding: 2px 6px;
+      border: 1px solid var(--iron);
+      color: var(--chrome);
+    }
+
+    /* Container */
+    .wrap {
+      max-width: 1340px;
+      margin: 0 auto;
+      padding: 48px 24px 80px 24px;
+    }
+
+    /* Corner Bracket Frame */
+    .hud-frame {
+      position: relative;
+      border: 1px solid var(--graphite);
+      background-color: var(--tar);
+      padding: 56px 48px;
+      margin-bottom: 48px;
+    }
+
+    .hud-frame::before {
+      content: "┌                                                                                                              ┐";
+      position: absolute;
+      top: -9px;
+      left: -2px;
+      right: -2px;
+      display: flex;
+      justify-content: space-between;
+      color: var(--chrome);
+      font-family: var(--font-mono);
+      pointer-events: none;
+    }
+
+    .hud-frame::after {
+      content: "└                                                                                                              ┘";
+      position: absolute;
+      bottom: -9px;
+      left: -2px;
+      right: -2px;
+      display: flex;
+      justify-content: space-between;
+      color: var(--chrome);
+      font-family: var(--font-mono);
+      pointer-events: none;
+    }
+
+    .hero-meta {
+      display: flex;
+      justify-content: space-between;
+      color: var(--concrete);
+      font-size: 11px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      margin-bottom: 24px;
+      border-bottom: 1px solid var(--graphite);
+      padding-bottom: 12px;
+    }
+
+    .hero-title {
+      font-family: var(--font-grotesque);
+      font-size: clamp(48px, 8vw, 110px);
+      line-height: 0.92;
+      text-transform: uppercase;
+      letter-spacing: -2px;
+      color: var(--cream);
+      margin-bottom: 24px;
+      word-break: break-word;
+    }
+
+    .hero-subtitle {
+      font-family: var(--font-serif);
+      font-style: italic;
+      font-size: clamp(20px, 3vw, 34px);
+      line-height: 1.25;
+      color: var(--chrome);
+      max-width: 860px;
+      margin-bottom: 40px;
+      font-weight: 400;
+    }
+
+    .hero-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px;
+      align-items: center;
+    }
+
+    .btn-main {
+      display: inline-flex;
+      align-items: center;
+      gap: 12px;
+      background-color: var(--signal-orange);
+      color: var(--near-black);
+      padding: 16px 32px;
+      font-family: var(--font-mono);
+      font-size: 13px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      transition: background-color 0.15s, transform 0.1s;
+    }
+
+    .btn-main:hover {
+      background-color: #ff6f4e;
+      transform: translateY(-1px);
+    }
+
+    .btn-sub {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      border: 1px solid var(--iron);
+      color: var(--cream);
+      padding: 16px 28px;
+      font-family: var(--font-mono);
+      font-size: 13px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      transition: background-color 0.15s, border-color 0.15s;
+    }
+
+    .btn-sub:hover {
+      background-color: var(--graphite);
+      border-color: var(--chrome);
+    }
+
+    /* Motion Reel Canvas */
+    .motion-block {
+      border: 1px solid var(--graphite);
+      background-color: var(--near-black);
+      position: relative;
+      margin-bottom: 48px;
+    }
+
+    .motion-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 16px;
+      border-bottom: 1px solid var(--graphite);
+      background-color: var(--tar);
+      font-size: 11px;
+      color: var(--concrete);
+      text-transform: uppercase;
+    }
+
+    .canvas-container {
+      width: 100%;
+      aspect-ratio: 16 / 9;
+      position: relative;
+      background-color: var(--near-black);
+    }
+
+    canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    /* Grid Section */
+    .section-title {
+      font-family: var(--font-grotesque);
+      font-size: 28px;
+      text-transform: uppercase;
+      letter-spacing: -0.5px;
+      margin-bottom: 8px;
+    }
+
+    .section-sub {
+      color: var(--concrete);
+      font-size: 12px;
+      margin-bottom: 24px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    .swiss-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 1px;
+      background-color: var(--graphite);
+      border: 1px solid var(--graphite);
+      margin-bottom: 48px;
+    }
+
+    .grid-cell {
+      background-color: var(--tar);
+      padding: 32px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      min-height: 240px;
+    }
+
+    .cell-num {
+      color: var(--signal-orange);
+      font-size: 12px;
+      font-weight: 700;
+      margin-bottom: 16px;
+    }
+
+    .cell-title {
+      font-family: var(--font-grotesque);
+      font-size: 20px;
+      text-transform: uppercase;
+      margin-bottom: 12px;
+      color: var(--cream);
+    }
+
+    .cell-desc {
+      color: var(--chrome);
+      font-size: 12px;
+      line-height: 1.6;
+      margin-bottom: 24px;
+    }
+
+    .cell-tag {
+      font-size: 10px;
+      color: var(--concrete);
+      border-top: 1px solid var(--graphite);
+      padding-top: 12px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    /* Interactive Badge Simulator */
+    .sim-panel {
+      border: 1px solid var(--graphite);
+      background-color: var(--tar);
+      padding: 36px;
+      margin-bottom: 48px;
+    }
+
+    .sim-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 32px;
+      align-items: center;
+    }
+
+    @media (max-width: 860px) {
+      .sim-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .sim-controls label {
+      display: block;
+      color: var(--concrete);
+      font-size: 11px;
+      text-transform: uppercase;
+      margin-bottom: 8px;
+    }
+
+    .sim-input, .sim-select {
+      width: 100%;
+      background-color: var(--near-black);
+      border: 1px solid var(--iron);
+      color: var(--cream);
+      font-family: var(--font-mono);
+      font-size: 13px;
+      padding: 10px 14px;
+      margin-bottom: 20px;
+    }
+
+    .sim-preview-box {
+      border: 1px solid var(--graphite);
+      background-color: var(--near-black);
+      padding: 24px;
+      min-height: 180px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      gap: 16px;
+    }
+
+    .sim-preview-user {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 16px;
+      font-weight: bold;
+    }
+
+    .rosette-badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 18px;
+      height: 18px;
+      background-color: var(--rosette-slate);
+      clip-path: polygon(
+        50% 0%, 65% 10%, 85% 15%, 90% 35%, 100% 50%,
+        90% 65%, 85% 85%, 65% 90%, 50% 100%,
+        35% 90%, 15% 85%, 10% 65%, 0% 50%,
+        10% 35%, 15% 15%, 35% 10%
+      );
+      color: #ffffff;
+      font-size: 10px;
+      font-family: var(--font-mono);
+      user-select: none;
+    }
+
+    /* Material 3 Expressive Demo Bubble */
+    .m3-bubble {
+      background-color: #1e2630;
+      color: #e4e7ea;
+      padding: 14px 16px;
+      border-radius: 24px 24px 8px 24px;
+      font-size: 13px;
+      line-height: 1.45;
+      max-width: 420px;
+      border: 1px solid #2a3442;
+    }
+
+    .m3-pill {
+      display: inline-block;
+      background-color: var(--rosette-slate);
+      color: #fff;
+      font-size: 10px;
+      padding: 3px 8px;
+      border-radius: 12px;
+      margin-bottom: 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    /* Footer */
+    footer {
+      border-top: 1px solid var(--graphite);
+      padding: 32px 24px;
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: center;
+      gap: 16px;
+      color: var(--concrete);
+      font-size: 11px;
+      text-transform: uppercase;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Technical HUD Topbar -->
+  <header class="hud-bar">
+    <div class="hud-left">
+      <span class="status-dot"></span>
+      <span>ZEN/DESKTOP · SYS: VER 5.1.0</span>
+      <span class="hud-tag">WIN_X64</span>
+    </div>
+    <div class="hud-links">
+      <a href="https://github.com/creamblyy/ZenDesktop" class="hud-link" target="_blank">[SOURCE_CODE]</a>
+      <a href="https://github.com/creamblyy/ZenDesktop/releases" class="hud-link" target="_blank">[RELEASES]</a>
+      <a href="badge_manager.html" class="hud-link">[BADGE_MANAGER]</a>
+    </div>
+  </header>
+
+  <div class="wrap">
+    <!-- Hero Frame with Corner Brackets -->
+    <section class="hud-frame">
+      <div class="hero-meta">
+        <span>DEV BRANCH · FORK 5.1.0</span>
+        <span>ARCH: WINDOWS X64 RELEASE</span>
+        <span>STATUS: ACTIVE BUILD</span>
+      </div>
+
+      <h1 class="hero-title">ZENDESKTOP</h1>
+      
+      <p class="hero-subtitle">
+        A restrained, privacy-first Windows fork of Telegram Desktop engineered with local relay hooks and Material 3 Expressive architecture.
+      </p>
+
+      <div class="hero-actions">
+        <a href="https://github.com/creamblyy/ZenDesktop/actions/workflows/build-zendesktop.yml" class="btn-main" target="_blank">
+          <span>DOWNLOAD WIN_X64 (EXE)</span>
+          <span>→</span>
+        </a>
+        <a href="https://github.com/creamblyy/ZenDesktop" class="btn-sub" target="_blank">
+          <span>GITHUB REPOSITORY</span>
+        </a>
+        <a href="badge_manager.html" class="btn-sub">
+          <span>WEB BADGE EDITOR</span>
+        </a>
+      </div>
+    </section>
+
+    <!-- Kinetic Swiss Motion Reel Canvas -->
+    <div class="motion-block">
+      <div class="motion-header">
+        <span id="scene-counter">01 · IDENTITY BURST</span>
+        <span id="scene-timecode">00:00:00:00</span>
+        <span id="scene-spec">SPEC: 1600x900 · 24FPS HUD REEL</span>
+      </div>
+      <div class="canvas-container">
+        <canvas id="motionCanvas" width="1600" height="900"></canvas>
+      </div>
+    </div>
+
+    <!-- Features Swiss Grid -->
+    <div class="section-title">SPECIFICATION MATRIX</div>
+    <div class="section-sub">SUBSYSTEM ARCHITECTURE & MODIFICATIONS</div>
+
+    <div class="swiss-grid">
+      <div class="grid-cell">
+        <div>
+          <div class="cell-num">01 / SUBSYSTEM</div>
+          <div class="cell-title">RELAY HOOKS</div>
+          <div class="cell-desc">
+            Local interceptor suppressing message revocation packets (`deleteMessages`). Deleted messages remain pinned in your local SQLite history with retained state flags.
+          </div>
+        </div>
+        <div class="cell-tag">SRC: RELAY_HOOKS.CPP · LOCAL CACHE</div>
+      </div>
+
+      <div class="grid-cell">
+        <div>
+          <div class="cell-num">02 / PRIVACY</div>
+          <div class="cell-title">GHOST MODE</div>
+          <div class="cell-desc">
+            Independent toggles for read receipt suppression (`readHistory`) and live typing dispatch (`sendProgress`). Read channels and direct chats in complete stealth.
+          </div>
+        </div>
+        <div class="cell-tag">CORE: APIWRAP.CPP · DATA_SESSION.CPP</div>
+      </div>
+
+      <div class="grid-cell">
+        <div>
+          <div class="cell-num">03 / IDENTITY</div>
+          <div class="cell-title">SLATE ROSETTES</div>
+          <div class="cell-desc">
+            Custom 8-lobed verification rosettes in industrial slate (`#656c73`) with crisp white pictograms: Desktop, Terminal (`>_`), Lightning (`⚡`), and Supporter (`✦`).
+          </div>
+        </div>
+        <div class="cell-tag">UI: UNREAD_BADGE.CPP · ZEN_BADGES.H</div>
+      </div>
+
+      <div class="grid-cell">
+        <div>
+          <div class="cell-num">04 / DESIGN</div>
+          <div class="cell-title">M3 EXPRESSIVE</div>
+          <div class="cell-desc">
+            Google Material 3 Expressive geometry applied across chat bubbles: 24px corner-large and 8px corner-small asymmetry, roomier message margins, and pill chips.
+          </div>
+        </div>
+        <div class="cell-tag">STYLE: CHAT.STYLE · 24PX BUBBLE</div>
+      </div>
+
+      <div class="grid-cell">
+        <div>
+          <div class="cell-num">05 / DISTRIBUTION</div>
+          <div class="cell-title">BADGE MANAGER</div>
+          <div class="cell-desc">
+            Decoupled GitHub Pages distribution tool connecting to raw GitHub API for zero-cost peer badge updates without recompiling the binary.
+          </div>
+        </div>
+        <div class="cell-tag">WEB: BADGE_MANAGER.HTML · REST API</div>
+      </div>
+
+      <div class="grid-cell">
+        <div>
+          <div class="cell-num">06 / TELEMETRY</div>
+          <div class="cell-title">CLEAN BUILD</div>
+          <div class="cell-desc">
+            Compiled natively against static Qt 6.12, OpenSSL 3.x, and WebRTC. Default analytics stripped; decoupled updater architecture.
+          </div>
+        </div>
+        <div class="cell-tag">TOOLSET: MSVC 19.44 · C++20</div>
+      </div>
+    </div>
+
+    <!-- Interactive Badge & M3 Simulator -->
+    <div class="sim-panel">
+      <div class="section-title" style="font-size: 20px;">INTERACTIVE SIMULATOR</div>
+      <div class="section-sub">REAL-TIME ROSETTE & M3 EXPRESSIVE BUBBLE PREVIEW</div>
+
+      <div class="sim-grid">
+        <div class="sim-controls">
+          <label>Display Name</label>
+          <input type="text" id="simName" class="sim-input" value="creamblyy">
+
+          <label>Peer Telegram ID</label>
+          <input type="text" id="simId" class="sim-input" value="532137983">
+
+          <label>Badge Role (8-lobed Slate Rosette)</label>
+          <select id="simBadge" class="sim-select">
+            <option value="dev">Developer (Terminal >_)</option>
+            <option value="desktop">Desktop (Monitor 🖥)</option>
+            <option value="staff">Staff (Lightning ⚡)</option>
+            <option value="supporter">Supporter (Spark ✦)</option>
+          </select>
+        </div>
+
+        <div class="sim-preview-box">
+          <div class="sim-preview-user">
+            <span id="previewName">creamblyy</span>
+            <span id="previewRosette" class="rosette-badge">⌨</span>
+            <span style="color: var(--concrete); font-size: 11px; font-weight: normal;">#532137983</span>
+          </div>
+
+          <div class="m3-bubble">
+            <div class="m3-pill">MATERIAL 3 EXPRESSIVE · 24PX</div>
+            <div>this message was deleted remotely, but preserved locally by relay hooks.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Technical Footer -->
+  <footer>
+    <div>ZEN/DESKTOP · FORK OF TELEGRAM DESKTOP · MIT / GPLV3</div>
+    <div>COMMIT: 8F3EB6E · WIN-X64 MSVC 14.44</div>
+    <div>HOSTED ON GITHUB PAGES</div>
+  </footer>
+
+  <!-- Kinetic Swiss Motion Canvas Script -->
+  <script>
+    (function() {
+      const canvas = document.getElementById('motionCanvas');
+      const ctx = canvas.getContext('2d');
+      const counterEl = document.getElementById('scene-counter');
+      const timecodeEl = document.getElementById('scene-timecode');
+
+      // flyheat color-system palette
+      const C = {
+        orange: '#ff5a36',
+        blue: '#2b3cff',
+        cream: '#f4efe6',
+        lime: '#e3f542',
+        dark: '#0e0e10',
+        ink: '#0b0b0d',
+        graphite: '#20252b',
+        iron: '#4a4e54',
+        slate: '#656c73'
+      };
+
+      // Easing functions
+      const eo = x => 1 - Math.pow(1 - x, 4);
+      const ei = x => x * x * x;
+      const eio = x => x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2;
+
+      // Scenes table
+      const scenes = [
+        {
+          name: '01 · IDENTITY BURST',
+          spec: 'BURST 12-RAY · SLATE ROSETTE · HUD',
+          dur: 2.4,
+          bg: C.dark,
+          ink: C.cream,
+          draw: function(p, t) {
+            ctx.fillStyle = C.dark;
+            ctx.fillRect(0, 0, 1600, 900);
+
+            const cx = 800, cy = 450;
+            const burst = eo(Math.min(1, p * 2.2));
+            const rot = t * 0.4;
+
+            // Draw rays
+            ctx.save();
+            ctx.translate(cx, cy);
+            ctx.rotate(rot);
+            ctx.strokeStyle = C.orange;
+            ctx.lineWidth = 3;
+            for (let i = 0; i < 12; i++) {
+              const a = (i * Math.PI) / 6;
+              const r1 = 30;
+              const r2 = 30 + burst * (i % 2 === 0 ? 160 : 100);
+              ctx.beginPath();
+              ctx.moveTo(Math.cos(a) * r1, Math.sin(a) * r1);
+              ctx.lineTo(Math.cos(a) * r2, Math.sin(a) * r2);
+              ctx.stroke();
+            }
+            ctx.restore();
+
+            // Center rosette
+            ctx.save();
+            ctx.translate(cx, cy);
+            ctx.fillStyle = C.slate;
+            const rSize = 36 * burst;
+            ctx.beginPath();
+            for (let i = 0; i < 16; i++) {
+              const a = (i * Math.PI) / 8;
+              const r = i % 2 === 0 ? rSize : rSize * 0.82;
+              const x = Math.cos(a) * r;
+              const y = Math.sin(a) * r;
+              if (i === 0) ctx.moveTo(x, y);
+              else ctx.lineTo(x, y);
+            }
+            ctx.closePath();
+            ctx.fill();
+
+            // Rosette symbol
+            if (p > 0.3) {
+              ctx.fillStyle = '#ffffff';
+              ctx.font = '700 20px Consolas, monospace';
+              ctx.textAlign = 'center';
+              ctx.textBaseline = 'middle';
+              ctx.fillText('>_', 0, 1);
+            }
+            ctx.restore();
+
+            // Text
+            ctx.fillStyle = C.cream;
+            ctx.font = '900 64px "Arial Black", sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('ZEN/DESKTOP', cx, cy + 260);
+
+            ctx.font = 'italic 400 24px Georgia, serif';
+            ctx.fillStyle = C.orange;
+            ctx.fillText('anti-recall · ghost mode · m3 expressive', cx, cy + 300);
+          }
+        },
+        {
+          name: '02 · MATERIAL 3 BUBBLE',
+          spec: 'CURVE ASYMMETRY · 24PX CORNER LARGE',
+          dur: 2.2,
+          bg: C.orange,
+          ink: C.ink,
+          draw: function(p, t) {
+            ctx.fillStyle = C.orange;
+            ctx.fillRect(0, 0, 1600, 900);
+
+            const cx = 800, cy = 450;
+            const enter = eo(Math.min(1, p * 2));
+            const w = 640 * enter;
+            const h = 220;
+
+            // M3 bubble
+            ctx.save();
+            ctx.translate(cx - w / 2, cy - h / 2);
+            ctx.fillStyle = C.ink;
+            ctx.beginPath();
+            ctx.roundRect(0, 0, w, h, [32, 32, 10, 32]);
+            ctx.fill();
+
+            if (p > 0.3) {
+              ctx.fillStyle = C.cream;
+              ctx.font = '900 36px "Arial Black", sans-serif';
+              ctx.textAlign = 'left';
+              ctx.fillText('M3 EXPRESSIVE RADIUS', 40, 70);
+
+              ctx.fillStyle = C.orange;
+              ctx.font = '700 16px Consolas, monospace';
+              ctx.fillText('BUBBLE_LARGE: 24PX · BUBBLE_SMALL: 8PX', 40, 110);
+
+              ctx.fillStyle = '#a8adb2';
+              ctx.font = 'italic 400 20px Georgia, serif';
+              ctx.fillText('Roomier padding and asymmetric corners across all chats.', 40, 150);
+            }
+            ctx.restore();
+          }
+        },
+        {
+          name: '03 · RELAY INTERCEPTION',
+          spec: 'INTERCEPT DELETE_MESSAGES · ZERO LOSS',
+          dur: 2.2,
+          bg: C.dark,
+          ink: C.cream,
+          draw: function(p, t) {
+            ctx.fillStyle = C.dark;
+            ctx.fillRect(0, 0, 1600, 900);
+
+            const cx = 800, cy = 450;
+            const prog = eo(Math.min(1, p * 1.5));
+
+            ctx.fillStyle = C.cream;
+            ctx.font = '900 52px "Arial Black", sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('ANTI-RECALL ACTIVE', cx, cy - 80);
+
+            ctx.font = '700 18px Consolas, monospace';
+            ctx.fillStyle = C.lime;
+            ctx.fillText('STATUS: DISPATCH_REVOKE_BLOCKED', cx, cy - 30);
+
+            // Timeline
+            ctx.strokeStyle = C.iron;
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(300, cy + 60);
+            ctx.lineTo(1300, cy + 60);
+            ctx.stroke();
+
+            // Moving dot
+            const dotX = 300 + 1000 * prog;
+            ctx.fillStyle = C.orange;
+            ctx.beginPath();
+            ctx.arc(dotX, cy + 60, 10, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.fillStyle = C.cream;
+            ctx.font = '700 14px Consolas, monospace';
+            ctx.fillText('LOCAL SQLITE RETAINED', dotX, cy + 100);
+          }
+        },
+        {
+          name: '04 · LOCKUP',
+          spec: 'ZEN/DESKTOP · BUILT FOR WINDOWS X64',
+          dur: 2.4,
+          bg: C.dark,
+          ink: C.cream,
+          draw: function(p, t) {
+            ctx.fillStyle = C.dark;
+            ctx.fillRect(0, 0, 1600, 900);
+
+            const cx = 800, cy = 450;
+            ctx.fillStyle = C.cream;
+            ctx.font = '900 84px "Arial Black", sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('ZENDESKTOP', cx, cy - 30);
+
+            ctx.strokeStyle = C.orange;
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.moveTo(400, cy + 10);
+            ctx.lineTo(1200, cy + 10);
+            ctx.stroke();
+
+            ctx.font = 'italic 400 28px Georgia, serif';
+            ctx.fillStyle = C.cream;
+            ctx.fillText('Quiet, private, and precise.', cx, cy + 60);
+
+            ctx.font = '700 14px Consolas, monospace';
+            ctx.fillStyle = C.iron;
+            ctx.fillText('RELEASE X64 · GITHUB ACTIONS · MIT LICENSE', cx, cy + 110);
+          }
+        }
+      ];
+
+      let startTime = null;
+
+      function formatTimecode(secs) {
+        const h = Math.floor(secs / 3600).toString().padStart(2, '0');
+        const m = Math.floor((secs % 3600) / 60).toString().padStart(2, '0');
+        const s = Math.floor(secs % 60).toString().padStart(2, '0');
+        const f = Math.floor((secs % 1) * 24).toString().padStart(2, '0');
+        return `${h}:${m}:${s}:${f}`;
+      }
+
+      function render(timestamp) {
+        if (!startTime) startTime = timestamp;
+        const totalSecs = (timestamp - startTime) / 1000;
+
+        // Loop scenes
+        const totalLoop = scenes.reduce((acc, s) => acc + s.dur, 0);
+        const curSec = totalSecs % totalLoop;
+
+        let accum = 0;
+        let curScene = scenes[0];
+        let p = 0;
+
+        for (let s of scenes) {
+          if (curSec >= accum && curSec < accum + s.dur) {
+            curScene = s;
+            p = (curSec - accum) / s.dur;
+            break;
+          }
+          accum += s.dur;
+        }
+
+        // Draw scene
+        curScene.draw(p, totalSecs);
+
+        // Technical HUD corner brackets
+        ctx.strokeStyle = '#4a4e54';
+        ctx.lineWidth = 2;
+        const bLen = 30;
+        const pad = 36;
+
+        // Top Left
+        ctx.beginPath();
+        ctx.moveTo(pad, pad + bLen); ctx.lineTo(pad, pad); ctx.lineTo(pad + bLen, pad);
+        ctx.stroke();
+
+        // Top Right
+        ctx.beginPath();
+        ctx.moveTo(1600 - pad - bLen, pad); ctx.lineTo(1600 - pad, pad); ctx.lineTo(1600 - pad, pad + bLen);
+        ctx.stroke();
+
+        // Bottom Left
+        ctx.beginPath();
+        ctx.moveTo(pad, 900 - pad - bLen); ctx.lineTo(pad, 900 - pad); ctx.lineTo(pad + bLen, 900 - pad);
+        ctx.stroke();
+
+        // Bottom Right
+        ctx.beginPath();
+        ctx.moveTo(1600 - pad - bLen, 900 - pad); ctx.lineTo(1600 - pad, 900 - pad); ctx.lineTo(1600 - pad, 900 - pad - bLen);
+        ctx.stroke();
+
+        // Update DOM labels
+        counterEl.textContent = curScene.name;
+        timecodeEl.textContent = formatTimecode(totalSecs);
+
+        requestAnimationFrame(render);
+      }
+
+      requestAnimationFrame(render);
+
+      // Simulator sync logic
+      const nameInput = document.getElementById('simName');
+      const badgeSelect = document.getElementById('simBadge');
+      const previewName = document.getElementById('previewName');
+      const previewRosette = document.getElementById('previewRosette');
+
+      const icons = {
+        dev: '>_',
+        desktop: '⌨',
+        staff: '⚡',
+        supporter: '✦'
+      };
+
+      function updatePreview() {
+        previewName.textContent = nameInput.value || 'peer';
+        const role = badgeSelect.value;
+        previewRosette.textContent = icons[role] || '★';
+      }
+
+      nameInput.addEventListener('input', updatePreview);
+      badgeSelect.addEventListener('change', updatePreview);
+      updatePreview();
+    })();
+  </script>
+</body>
+</html>
