@@ -1,9 +1,7 @@
 <p align="center">
   <a href="https://github.com/creamblyy/ZenDesktop/stargazers">
-    <img src="https://img.shields.io/badge/%E2%98%85%20Star%20Repo-Support%20ZenDesktop-2b3cff?style=for-the-badge&logo=github&logoColor=white" alt="Star ZenDesktop on GitHub">
+    <img src="docs/star_banner.png" width="100%" alt="Нравится ZenDesktop? Поставьте звёздочку на GitHub">
   </a>
-  <br>
-  <sub>Если вам нравится проект, поддержите разработку — поставьте звезду репозиторию на GitHub.</sub>
 </p>
 
 <br>
