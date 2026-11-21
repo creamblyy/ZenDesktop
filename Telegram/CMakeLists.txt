@@ -142,6 +142,8 @@ PRIVATE
     relay_hooks/zen_badges.h
     relay_hooks/zen_updater.cpp
     relay_hooks/zen_updater.h
+    relay_hooks/zen_lyrics_box.cpp
+    relay_hooks/zen_lyrics_box.h
 
     api/api_attached_stickers.cpp
     api/api_attached_stickers.h

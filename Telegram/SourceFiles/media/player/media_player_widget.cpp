@@ -36,6 +36,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "storage/storage_account.h"
 #include "main/main_session.h"
 #include "window/window_session_controller.h"
+#include "relay_hooks/zen_lyrics_box.h"
 #include "styles/style_media_player.h"
 
 namespace Media {
@@ -537,6 +538,10 @@ void Widget::mouseReleaseEvent(QMouseEvent *e) {
 					_showItemCallback(item);
 				}
 			}
+		} else if (_type == AudioMsgId::Type::Song) {
+			if (_controller) {
+				_controller->show(Box<Relay::ZenLyricsBox>(_controller));
+			}
 		}
 	}
 }
@@ -556,6 +561,7 @@ void Widget::updateOverLabelsState(bool over) {
 	_labelsOver = over;
 	const auto pressShowsItem = _labelsOver
 		&& ((_type == AudioMsgId::Type::Voice)
+			|| (_type == AudioMsgId::Type::Song)
 			|| _lastSongFromAnotherSession);
 	setCursor(pressShowsItem ? style::cur_pointer : style::cur_default);
 	_togglePlaylistRequests.fire(over && (_type == AudioMsgId::Type::Song));
