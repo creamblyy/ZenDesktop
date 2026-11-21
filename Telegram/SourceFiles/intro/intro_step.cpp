@@ -438,16 +438,18 @@ void Step::paintCover(QPainter &p, int top) {
 		return;
 	}
 
+	p.fillRect(0, 0, width(), coverHeight, QColor(43, 60, 255));
+
 	static const auto banner = QImage(u":/gui/art/intro_banner.png"_q);
 	if (!banner.isNull()) {
-		const auto sx = std::max(0, (banner.width() - width() * banner.height() / st::introCoverHeight) / 2);
-		const auto sw = std::min(banner.width(), width() * banner.height() / st::introCoverHeight);
-		const auto sy = -top * banner.height() / st::introCoverHeight;
-		const auto sh = coverHeight * banner.height() / st::introCoverHeight;
+		const auto bannerW = banner.width() * st::introCoverHeight / banner.height();
+		const auto x = (width() - bannerW) / 2;
+		p.save();
+		p.setClipRect(0, 0, width(), coverHeight);
 		p.drawImage(
-			QRect(0, 0, width(), coverHeight),
-			banner,
-			QRect(sx, sy, sw, sh));
+			QRect(x, top, bannerW, st::introCoverHeight),
+			banner);
+		p.restore();
 		return;
 	}
 
