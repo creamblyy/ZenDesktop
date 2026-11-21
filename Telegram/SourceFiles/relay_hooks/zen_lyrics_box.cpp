@@ -67,7 +67,7 @@ void ZenLyricsBox::prepare() {
 
 	setupContent();
 
-	Media::Player::instance()->updated(
+	Media::Player::instance()->updatedNotifier(
 	) | rpl::on_next([=](const Media::Player::TrackState &state) {
 		if (state.id.type() == AudioMsgId::Type::Song) {
 			_isPlaying = (state.state == Media::Player::State::Playing);
@@ -110,7 +110,7 @@ void ZenLyricsBox::handleTrackChange() {
 		_duration = doc->duration();
 		_coverMedia = doc->createMediaView();
 		if (_coverMedia) {
-			_coverMedia->thumbnailWanted(doc->fileOrigin());
+			_coverMedia->thumbnailWanted(current.contextId());
 		}
 	}
 
@@ -222,18 +222,8 @@ void ZenLyricsBox::setupContent() {
 			const auto me = static_cast<QMouseEvent*>(e.get());
 			if (me->buttons() & Qt::LeftButton) {
 				const auto ratio = std::clamp(float64(me->pos().x()) / _progressBar->width(), 0., 1.);
-				const auto targetSec = ratio * _duration;
-				const auto current = Media::Player::instance()->current(AudioMsgId::Type::Song);
-				if (current) {
-					const auto state = Media::Player::instance()->getState(AudioMsgId::Type::Song);
-					if (state.frequency > 0) {
-						Media::Player::instance()->play({
-							.id = current,
-							.position = crl::time(targetSec * state.frequency)
-						});
-					}
-				}
-				_currentPosition = targetSec;
+				Media::Player::instance()->finishSeeking(AudioMsgId::Type::Song, ratio);
+				_currentPosition = ratio * _duration;
 				_progressBar->update();
 			}
 		}
@@ -249,7 +239,7 @@ void ZenLyricsBox::setupContent() {
 	_remainingLabel->setTextColorOverride(QColor(90, 102, 118));
 
 	// 5. Primary Controls: Prev, Play/Pause, Next
-	const auto prevBtn = Ui::CreateChild<Ui::IconButton>(_leftCol, st::mediaPlayerPrevious);
+	const auto prevBtn = Ui::CreateChild<Ui::IconButton>(_leftCol, st::mediaPlayerPreviousButton);
 	prevBtn->setGeometry((kLeftWidth - 170) / 2, kCoverSize + 110, 48, 48);
 	prevBtn->setClickedCallback([=] {
 		Media::Player::instance()->previous();
@@ -294,7 +284,7 @@ void ZenLyricsBox::setupContent() {
 		}
 	}, _playBtn->lifetime());
 
-	const auto nextBtn = Ui::CreateChild<Ui::IconButton>(_leftCol, st::mediaPlayerNext);
+	const auto nextBtn = Ui::CreateChild<Ui::IconButton>(_leftCol, st::mediaPlayerNextButton);
 	nextBtn->setGeometry((kLeftWidth + 74) / 2, kCoverSize + 110, 48, 48);
 	nextBtn->setClickedCallback([=] {
 		Media::Player::instance()->next();
@@ -474,15 +464,9 @@ void ZenLyricsBox::renderLyrics() {
 		const auto targetTime = item.time;
 		label->events() | rpl::on_next([=](not_null<QEvent*> e) {
 			if (e->type() == QEvent::MouseButtonRelease) {
-				const auto current = Media::Player::instance()->current(AudioMsgId::Type::Song);
-				if (current) {
-					const auto state = Media::Player::instance()->getState(AudioMsgId::Type::Song);
-					if (state.frequency > 0) {
-						Media::Player::instance()->play({
-							.id = current,
-							.position = crl::time(targetTime * state.frequency)
-						});
-					}
+				if (_duration > 0) {
+					const auto ratio = std::clamp(targetTime / _duration, 0.0, 1.0);
+					Media::Player::instance()->finishSeeking(AudioMsgId::Type::Song, ratio);
 				}
 				_currentPosition = targetTime;
 				updateActiveLine(targetTime);
