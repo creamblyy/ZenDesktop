@@ -85,11 +85,16 @@ void ZenPrivacy::setupContent() {
 		rpl::single(QString::fromUtf8("Скрывать отчет о прочтении")),
 		hooks.isReadHistoryHidden());
 
+	const auto storiesToggle = addCheckbox(
+		rpl::single(QString::fromUtf8("Скрывать просмотр историй (Stories)")),
+		hooks.isStoriesStealthEnabled());
+
 	ghostToggle->checkedChanges(
 	) | rpl::on_next([=](bool checked) {
 		Relay::RelayHooks::Instance().setGhostModeEnabled(checked);
 		typingToggle->setChecked(Relay::RelayHooks::Instance().isTypingHidden());
 		readToggle->setChecked(Relay::RelayHooks::Instance().isReadHistoryHidden());
+		storiesToggle->setChecked(Relay::RelayHooks::Instance().isStoriesStealthEnabled());
 	}, lifetime);
 
 	typingToggle->checkedChanges(
@@ -102,11 +107,16 @@ void ZenPrivacy::setupContent() {
 		Relay::RelayHooks::Instance().setReadHistoryHidden(checked);
 	}, lifetime);
 
+	storiesToggle->checkedChanges(
+	) | rpl::on_next([=](bool checked) {
+		Relay::RelayHooks::Instance().setStoriesStealthEnabled(checked);
+	}, lifetime);
+
 	Ui::AddSkip(content);
 	Ui::AddDivider(content);
 	Ui::AddSkip(content);
 
-	Ui::AddSubsectionTitle(content, rpl::single(QString::fromUtf8("Защита сообщений")));
+	Ui::AddSubsectionTitle(content, rpl::single(QString::fromUtf8("Защита сообщений и приватность")));
 
 	const auto antiRecallToggle = addCheckbox(
 		rpl::single(QString::fromUtf8("Anti-Recall (Сохранение удаленных)")),
@@ -114,11 +124,37 @@ void ZenPrivacy::setupContent() {
 
 	Ui::AddDividerText(
 		content,
-		rpl::single(QString::fromUtf8("Сохраняет входящие сообщения локально на устройстве, даже если отправитель удалил их у всех.")));
+		rpl::single(QString::fromUtf8("Сохраняет удаленные собеседником сообщения локально с визуальной пометкой [удалено].")));
 
 	antiRecallToggle->checkedChanges(
 	) | rpl::on_next([=](bool checked) {
 		Relay::RelayHooks::Instance().setAntiRecallEnabled(checked);
+	}, lifetime);
+
+	const auto noSponsoredToggle = addCheckbox(
+		rpl::single(QString::fromUtf8("Отключение рекламы (No Sponsored)")),
+		hooks.isNoSponsoredEnabled());
+
+	Ui::AddDividerText(
+		content,
+		rpl::single(QString::fromUtf8("Блокирует показ нативных спонсированных рекламных постов Telegram в каналах и видео.")));
+
+	noSponsoredToggle->checkedChanges(
+	) | rpl::on_next([=](bool checked) {
+		Relay::RelayHooks::Instance().setNoSponsoredEnabled(checked);
+	}, lifetime);
+
+	const auto hidePhoneToggle = addCheckbox(
+		rpl::single(QString::fromUtf8("Скрывать свой номер телефона")),
+		hooks.isHidePhoneNumberEnabled());
+
+	Ui::AddDividerText(
+		content,
+		rpl::single(QString::fromUtf8("Заменяет отображение номера телефона на маску (+* *** ***-**-**) в настройках и профиле для стримов и скриншотов.")));
+
+	hidePhoneToggle->checkedChanges(
+	) | rpl::on_next([=](bool checked) {
+		Relay::RelayHooks::Instance().setHidePhoneNumberEnabled(checked);
 	}, lifetime);
 
 	Ui::ResizeFitChild(this, content);
@@ -198,6 +234,25 @@ void ZenAppearance::setupContent() {
 	greetingToggle->checkedChanges(
 	) | rpl::on_next([=](bool checked) {
 		Relay::RelayHooks::Instance().setGreetingStickerDisabled(checked);
+	}, lifetime);
+
+	Ui::AddSkip(content);
+	Ui::AddDivider(content);
+	Ui::AddSkip(content);
+
+	Ui::AddSubsectionTitle(content, rpl::single(QString::fromUtf8("Профиль и информация")));
+
+	const auto peerIdToggle = addCheckbox(
+		rpl::single(QString::fromUtf8("Показывать ID в профилях")),
+		hooks.isShowPeerIdEnabled());
+
+	Ui::AddDividerText(
+		content,
+		rpl::single(QString::fromUtf8("Отображает числовой User ID, Chat ID или Channel ID в блоке сведений профиля с возможностью быстрого копирования.")));
+
+	peerIdToggle->checkedChanges(
+	) | rpl::on_next([=](bool checked) {
+		Relay::RelayHooks::Instance().setShowPeerIdEnabled(checked);
 	}, lifetime);
 
 	Ui::ResizeFitChild(this, content);

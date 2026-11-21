@@ -514,7 +514,10 @@ void BottomInfo::layoutDateText() {
 		: (Relay::RelayHooks::Instance().isTimeWithSecondsEnabled()
 			? _data.date.time().toString(u"hh:mm:ss"_q)
 			: QLocale().toString(_data.date.time(), QLocale::ShortFormat)));
-	const auto afterAuthor = prefix + date;
+	const auto deletedTag = (_data.flags & Data::Flag::Deleted)
+		? QString::fromUtf8("[удалено] ")
+		: QString();
+	const auto afterAuthor = prefix + deletedTag + date;
 	const auto afterAuthorWidth = st::msgDateFont->width(afterAuthor);
 	const auto authorWidth = st::msgDateFont->width(author);
 	const auto maxWidth = st::maxSignatureSize;
@@ -673,6 +676,9 @@ BottomInfo::Data BottomInfoDataFromMessage(not_null<Message*> message) {
 	auto result = BottomInfo::Data();
 	result.date = message->dateTime();
 	result.effectId = item->effectId();
+	if (Relay::RelayHooks::Instance().isMessageDeleted(item->fullId().peer.value, item->id.bare)) {
+		result.flags |= Flag::Deleted;
+	}
 	if (message->hasOutLayout()) {
 		result.flags |= Flag::OutLayout;
 	}

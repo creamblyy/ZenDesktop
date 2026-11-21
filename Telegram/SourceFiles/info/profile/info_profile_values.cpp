@@ -28,6 +28,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "data/data_folder.h"
 #include "data/data_changes.h"
 #include "data/stickers/data_custom_emoji.h"
+#include "relay_hooks/relay_hooks.h"
 #include "chat_helpers/stickers_emoji_pack.h"
 #include "data/data_channel.h"
 #include "data/data_chat.h"
@@ -134,6 +135,9 @@ rpl::producer<TextWithEntities> PhoneValue(not_null<UserData*> user) {
 			user,
 			UpdateFlag::PhoneNumber) | rpl::to_empty
 	) | rpl::map([=] {
+		if (user->isSelf() && Relay::RelayHooks::Instance().isHidePhoneNumberEnabled()) {
+			return tr::marked(u"+* *** ***-**-**"_q);
+		}
 		return tr::marked(Ui::FormatPhone(user->phone()));
 	});
 }

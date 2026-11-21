@@ -6,6 +6,7 @@ For license and copyright information please follow this link:
 https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "info/profile/info_profile_actions.h"
+#include "relay_hooks/relay_hooks.h"
 
 #include "api/api_blocked_peers.h"
 #include "api/api_chat_participants.h"
@@ -1902,6 +1903,21 @@ BlockPart DetailsFiller::makeInfo() {
 			setupAboutContextMenu(about.text, AboutWithAdvancedValue(_peer));
 			SetupAboutPeerIdDrag(about.text, _peer);
 		}
+	}
+
+	if (Relay::RelayHooks::Instance().isShowPeerIdEnabled()) {
+		const auto bareId = peerToUser(_peer->id).bare
+			? peerToUser(_peer->id).bare
+			: peerToChannel(_peer->id).bare
+			? peerToChannel(_peer->id).bare
+			: peerToChat(_peer->id).bare
+			? peerToChat(_peer->id).bare
+			: _peer->id.value;
+		const auto idStr = QString::number(bareId);
+		addInfoOneLine(
+			v::text::data(QString::fromUtf8("ID профиля")),
+			rpl::single(TextWithEntities{ idStr }),
+			idStr);
 	}
 	raw->toggleOn(tracker.atLeastOneShownValue());
 	raw->finishAnimating();

@@ -10,6 +10,7 @@ This file is part of Telegram Desktop fork with RelayHooks.
 #include <memory>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 namespace Relay {
@@ -24,6 +25,7 @@ struct HookStats {
 	uint64_t deletedMessagesIntercepted = 0;
 	uint64_t typingBlocked = 0;
 	uint64_t readHistoryBlocked = 0;
+	uint64_t storiesBlocked = 0;
 	uint64_t messagesModified = 0;
 };
 
@@ -49,12 +51,29 @@ public:
 	[[nodiscard]] bool isReadHistoryHidden() const;
 	void setReadHistoryHidden(bool hidden);
 
+	[[nodiscard]] bool isStoriesStealthEnabled() const;
+	void setStoriesStealthEnabled(bool enabled);
+	[[nodiscard]] bool isReadStoriesHidden() const;
+
+	[[nodiscard]] bool isNoSponsoredEnabled() const;
+	void setNoSponsoredEnabled(bool enabled);
+
+	[[nodiscard]] bool isHidePhoneNumberEnabled() const;
+	void setHidePhoneNumberEnabled(bool enabled);
+
 	// Appearance
 	[[nodiscard]] bool isTimeWithSecondsEnabled() const;
 	void setTimeWithSecondsEnabled(bool enabled);
 
 	[[nodiscard]] bool isGreetingStickerDisabled() const;
 	void setGreetingStickerDisabled(bool disabled);
+
+	[[nodiscard]] bool isShowPeerIdEnabled() const;
+	void setShowPeerIdEnabled(bool enabled);
+
+	// Anti-Recall Visual State
+	[[nodiscard]] bool isMessageDeleted(uint64_t peerId, int32_t messageId) const;
+	void markMessageDeleted(uint64_t peerId, int32_t messageId);
 
 	// Network
 	[[nodiscard]] bool isDownloadBoostEnabled() const;
@@ -72,17 +91,10 @@ public:
 	void resetSettings();
 
 	// Core Hook Interceptors
-	// Returns false if deletion should be intercepted/cancelled
 	bool handleMessagesDeleted(uint64_t peerId, const std::vector<int32_t> &messageIds);
 	bool handleNonChannelMessagesDeleted(const std::vector<int32_t> &messageIds);
-
-	// Returns false if sending should be aborted
 	bool handleBeforeSendMessage(QString &text);
-
-	// Returns false if typing notification should be dropped
 	bool handleSendTyping(uint64_t peerId);
-
-	// Returns false if mark as read should be dropped
 	bool handleReadHistory(uint64_t peerId, int32_t maxId);
 
 	// Hook Registration API
@@ -107,11 +119,16 @@ private:
 	bool _antiRecallEnabled = true; // Anti-recall on by default
 	bool _hideTyping = false;
 	bool _hideReadHistory = false;
+	bool _storiesStealth = false;
+	bool _noSponsored = true; // Block ads by default
+	bool _hidePhoneNumber = false;
 	bool _timeWithSeconds = false;
 	bool _greetingStickerDisabled = false;
-	bool _downloadBoost = true; // Enabled by default
+	bool _showPeerId = true;
+	bool _downloadBoost = true; // Boost enabled by default
 	AutoUpdateMode _autoUpdateMode = AutoUpdateMode::DownloadOnly;
 
+	std::unordered_set<uint64_t> _deletedMessages;
 	HookStats _stats;
 
 	std::unordered_map<std::string, DeleteHookFn> _deleteHooks;

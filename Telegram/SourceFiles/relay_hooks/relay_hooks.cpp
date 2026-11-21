@@ -10,6 +10,13 @@ This file is part of Telegram Desktop fork with RelayHooks.
 #include <QtCore/QSettings>
 
 namespace Relay {
+namespace {
+
+inline uint64_t MakeMessageKey(uint64_t peerId, int32_t messageId) {
+	return ((uint64_t)peerId << 24) ^ static_cast<uint32_t>(messageId);
+}
+
+} // namespace
 
 RelayHooks &RelayHooks::Instance() {
 	static RelayHooks instance;
@@ -29,6 +36,7 @@ void RelayHooks::setGhostModeEnabled(bool enabled) {
 	_ghostModeEnabled = enabled;
 	_hideTyping = enabled;
 	_hideReadHistory = enabled;
+	_storiesStealth = enabled;
 	saveSettings();
 	LOG(("RelayHooks: Ghost mode set to %1").arg(enabled ? "true" : "false"));
 }
@@ -61,6 +69,38 @@ void RelayHooks::setReadHistoryHidden(bool hidden) {
 	saveSettings();
 }
 
+bool RelayHooks::isStoriesStealthEnabled() const {
+	return _storiesStealth || _ghostModeEnabled;
+}
+
+void RelayHooks::setStoriesStealthEnabled(bool enabled) {
+	_storiesStealth = enabled;
+	saveSettings();
+}
+
+bool RelayHooks::isReadStoriesHidden() const {
+	return _storiesStealth || _ghostModeEnabled;
+}
+
+bool RelayHooks::isNoSponsoredEnabled() const {
+	return _noSponsored;
+}
+
+void RelayHooks::setNoSponsoredEnabled(bool enabled) {
+	_noSponsored = enabled;
+	saveSettings();
+	LOG(("RelayHooks: No-Sponsored set to %1").arg(enabled ? "true" : "false"));
+}
+
+bool RelayHooks::isHidePhoneNumberEnabled() const {
+	return _hidePhoneNumber;
+}
+
+void RelayHooks::setHidePhoneNumberEnabled(bool enabled) {
+	_hidePhoneNumber = enabled;
+	saveSettings();
+}
+
 bool RelayHooks::isTimeWithSecondsEnabled() const {
 	return _timeWithSeconds;
 }
@@ -79,6 +119,27 @@ void RelayHooks::setGreetingStickerDisabled(bool disabled) {
 	_greetingStickerDisabled = disabled;
 	saveSettings();
 	LOG(("RelayHooks: Greeting sticker disabled set to %1").arg(disabled ? "true" : "false"));
+}
+
+bool RelayHooks::isShowPeerIdEnabled() const {
+	return _showPeerId;
+}
+
+void RelayHooks::setShowPeerIdEnabled(bool enabled) {
+	_showPeerId = enabled;
+	saveSettings();
+}
+
+bool RelayHooks::isMessageDeleted(uint64_t peerId, int32_t messageId) const {
+	return _deletedMessages.contains(MakeMessageKey(peerId, messageId))
+		|| _deletedMessages.contains(MakeMessageKey(0, messageId));
+}
+
+void RelayHooks::markMessageDeleted(uint64_t peerId, int32_t messageId) {
+	_deletedMessages.insert(MakeMessageKey(peerId, messageId));
+	if (peerId != 0) {
+		_deletedMessages.insert(MakeMessageKey(0, messageId));
+	}
 }
 
 bool RelayHooks::isDownloadBoostEnabled() const {
@@ -118,8 +179,12 @@ void RelayHooks::loadSettings() {
 	_antiRecallEnabled = s.value("anti_recall", true).toBool();
 	_hideTyping = s.value("hide_typing", _ghostModeEnabled).toBool();
 	_hideReadHistory = s.value("hide_read_history", _ghostModeEnabled).toBool();
+	_storiesStealth = s.value("stories_stealth", _ghostModeEnabled).toBool();
+	_noSponsored = s.value("no_sponsored", true).toBool();
+	_hidePhoneNumber = s.value("hide_phone_number", false).toBool();
 	_timeWithSeconds = s.value("time_with_seconds", false).toBool();
 	_greetingStickerDisabled = s.value("greeting_sticker_disabled", false).toBool();
+	_showPeerId = s.value("show_peer_id", true).toBool();
 	_downloadBoost = s.value("download_boost", true).toBool();
 	_autoUpdateMode = static_cast<AutoUpdateMode>(s.value("auto_update_mode", 0).toInt());
 }
@@ -130,8 +195,12 @@ void RelayHooks::saveSettings() {
 	s.setValue("anti_recall", _antiRecallEnabled);
 	s.setValue("hide_typing", _hideTyping);
 	s.setValue("hide_read_history", _hideReadHistory);
+	s.setValue("stories_stealth", _storiesStealth);
+	s.setValue("no_sponsored", _noSponsored);
+	s.setValue("hide_phone_number", _hidePhoneNumber);
 	s.setValue("time_with_seconds", _timeWithSeconds);
 	s.setValue("greeting_sticker_disabled", _greetingStickerDisabled);
+	s.setValue("show_peer_id", _showPeerId);
 	s.setValue("download_boost", _downloadBoost);
 	s.setValue("auto_update_mode", static_cast<int>(_autoUpdateMode));
 }
@@ -142,8 +211,12 @@ bool RelayHooks::exportSettings(const QString &filePath) const {
 	root["anti_recall"] = _antiRecallEnabled;
 	root["hide_typing"] = _hideTyping;
 	root["hide_read_history"] = _hideReadHistory;
+	root["stories_stealth"] = _storiesStealth;
+	root["no_sponsored"] = _noSponsored;
+	root["hide_phone_number"] = _hidePhoneNumber;
 	root["time_with_seconds"] = _timeWithSeconds;
 	root["greeting_sticker_disabled"] = _greetingStickerDisabled;
+	root["show_peer_id"] = _showPeerId;
 	root["download_boost"] = _downloadBoost;
 	root["auto_update_mode"] = static_cast<int>(_autoUpdateMode);
 
@@ -170,8 +243,12 @@ bool RelayHooks::importSettings(const QString &filePath) {
 	if (obj.contains("anti_recall")) _antiRecallEnabled = obj["anti_recall"].toBool();
 	if (obj.contains("hide_typing")) _hideTyping = obj["hide_typing"].toBool();
 	if (obj.contains("hide_read_history")) _hideReadHistory = obj["hide_read_history"].toBool();
+	if (obj.contains("stories_stealth")) _storiesStealth = obj["stories_stealth"].toBool();
+	if (obj.contains("no_sponsored")) _noSponsored = obj["no_sponsored"].toBool();
+	if (obj.contains("hide_phone_number")) _hidePhoneNumber = obj["hide_phone_number"].toBool();
 	if (obj.contains("time_with_seconds")) _timeWithSeconds = obj["time_with_seconds"].toBool();
 	if (obj.contains("greeting_sticker_disabled")) _greetingStickerDisabled = obj["greeting_sticker_disabled"].toBool();
+	if (obj.contains("show_peer_id")) _showPeerId = obj["show_peer_id"].toBool();
 	if (obj.contains("download_boost")) _downloadBoost = obj["download_boost"].toBool();
 	if (obj.contains("auto_update_mode")) _autoUpdateMode = static_cast<AutoUpdateMode>(obj["auto_update_mode"].toInt());
 
@@ -184,8 +261,12 @@ void RelayHooks::resetSettings() {
 	_antiRecallEnabled = true;
 	_hideTyping = false;
 	_hideReadHistory = false;
+	_storiesStealth = false;
+	_noSponsored = true;
+	_hidePhoneNumber = false;
 	_timeWithSeconds = false;
 	_greetingStickerDisabled = false;
+	_showPeerId = true;
 	_downloadBoost = true;
 	_autoUpdateMode = AutoUpdateMode::DownloadOnly;
 	saveSettings();
@@ -193,6 +274,10 @@ void RelayHooks::resetSettings() {
 }
 
 bool RelayHooks::handleMessagesDeleted(uint64_t peerId, const std::vector<int32_t> &messageIds) {
+	for (const auto id : messageIds) {
+		markMessageDeleted(peerId, id);
+	}
+
 	// Execute custom hooks first
 	for (const auto &[id, hook] : _deleteHooks) {
 		if (hook && !hook(peerId, messageIds)) {

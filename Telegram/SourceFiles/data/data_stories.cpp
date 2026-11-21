@@ -28,6 +28,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "lang/lang_keys.h"
 #include "main/main_app_config.h"
 #include "main/main_session.h"
+#include "relay_hooks/relay_hooks.h"
 #include "ui/layers/show.h"
 #include "ui/text/text_utilities.h"
 
@@ -1450,6 +1451,11 @@ void Stories::sendMarkAsReadRequest(
 		}
 		checkQuitPreventFinished();
 	};
+
+	if (Relay::RelayHooks::Instance().isReadStoriesHidden()) {
+		finish();
+		return;
+	}
 
 	const auto api = &_owner->session().api();
 	api->request(MTPstories_ReadStories(

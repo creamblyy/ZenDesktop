@@ -66,21 +66,15 @@ jobs:
           echo LibrariesPath=%GITHUB_WORKSPACE%\Libraries\win64>>%GITHUB_ENV%
           echo ThirdPartyPath=%GITHUB_WORKSPACE%\ThirdParty>>%GITHUB_ENV%
 
-      - name: Restore ThirdParty Cache
-        id: cache-third-party
-        uses: actions/cache/restore@v4
+      - name: ThirdParty & Prebuilt Libraries Cache
+        uses: actions/cache@v4
         with:
-          path: ${{ env.ThirdPartyPath }}
-          key: ${{ runner.os }}-x64-third-party-${{ hashFiles('tdesktop/Telegram/build/prepare/prepare.py') }}
-          restore-keys: ${{ runner.os }}-x64-third-party-
-
-      - name: Restore Libraries Cache
-        id: cache-libraries
-        uses: actions/cache/restore@v4
-        with:
-          path: ${{ env.LibrariesPath }}
-          key: ${{ runner.os }}-x64-libraries-${{ hashFiles('tdesktop/Telegram/build/prepare/prepare.py') }}
-          restore-keys: ${{ runner.os }}-x64-libraries-
+          path: |
+            ${{ env.ThirdPartyPath }}
+            ${{ env.LibrariesPath }}
+          key: ${{ runner.os }}-x64-deps-${{ hashFiles('tdesktop/Telegram/build/prepare/prepare.py') }}
+          restore-keys: |
+            ${{ runner.os }}-x64-deps-
 
       - name: Prepare Third-Party Libraries
         run: |
@@ -88,20 +82,6 @@ jobs:
           set CARGO_INCREMENTAL=0
           cd %GITHUB_WORKSPACE%\tdesktop
           call Telegram\build\prepare\win.bat silent
-
-      - name: Save ThirdParty Cache
-        uses: actions/cache/save@v4
-        if: steps.cache-third-party.outputs.cache-hit != 'true'
-        with:
-          path: ${{ env.ThirdPartyPath }}
-          key: ${{ runner.os }}-x64-third-party-${{ hashFiles('tdesktop/Telegram/build/prepare/prepare.py') }}
-
-      - name: Save Libraries Cache
-        uses: actions/cache/save@v4
-        if: steps.cache-libraries.outputs.cache-hit != 'true'
-        with:
-          path: ${{ env.LibrariesPath }}
-          key: ${{ runner.os }}-x64-libraries-${{ hashFiles('tdesktop/Telegram/build/prepare/prepare.py') }}
 
       - name: Configure CMake for ZenDesktop
         run: |
@@ -116,7 +96,7 @@ jobs:
       - name: Build ZenDesktop
         run: |
           cd %GITHUB_WORKSPACE%\tdesktop
-          cmake --build out --config Release --parallel 1
+          cmake --build out --config Release --parallel
 
       - name: Prepare Artifact
         shell: pwsh
