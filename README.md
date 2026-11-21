@@ -1,104 +1,74 @@
-# [Telegram Desktop][telegram_desktop] – Official Messenger
+<p align="center">
+  <img src="docs/avatar_electric_left.png" width="128" height="128" alt="ZenDesktop Logo" style="border-radius: 50%;">
+</p>
 
-This is the complete source code and the build instructions for the official [Telegram][telegram] messenger desktop client, based on the [Telegram API][telegram_api] and the [MTProto][telegram_proto] secure protocol.
+<h1 align="center">ZenDesktop</h1>
 
-[![Version](https://badge.fury.io/gh/telegramdesktop%2Ftdesktop.svg)](https://github.com/telegramdesktop/tdesktop/releases)
-[![Build Status](https://github.com/telegramdesktop/tdesktop/workflows/Windows./badge.svg)](https://github.com/telegramdesktop/tdesktop/actions)
-[![Build Status](https://github.com/telegramdesktop/tdesktop/workflows/MacOS./badge.svg)](https://github.com/telegramdesktop/tdesktop/actions)
-[![Build Status](https://github.com/telegramdesktop/tdesktop/workflows/Linux./badge.svg)](https://github.com/telegramdesktop/tdesktop/actions)
-[![Built with Depot](https://img.shields.io/badge/Built%20with-Depot.dev-46A75A)](https://depot.dev)
+<p align="center">
+  <b>Модифицированный кросс-платформенный Telegram клиент с огромным количеством собственного и перенесённого функционала.</b>
+</p>
 
-[![Preview of Telegram Desktop][preview_image]][preview_image_url]
+<p align="center">
+  <a href="https://github.com/creamblyy/ZenDesktop/actions/workflows/build-zendesktop.yml"><img src="https://github.com/creamblyy/ZenDesktop/actions/workflows/build-zendesktop.yml/badge.svg" alt="Build Status"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-GPLv3-blue.svg" alt="License: GPLv3"></a>
+  <a href="https://github.com/creamblyy/ZenDesktop/releases"><img src="https://img.shields.io/badge/Platform-Windows%20x64-0078D6.svg?logo=windows&logoColor=white" alt="Windows x64"></a>
+  <a href="https://creamblyy.github.io/ZenDesktop/"><img src="https://img.shields.io/badge/Website-Online-2b3cff" alt="Website"></a>
+</p>
 
-The source code is published under GPLv3 with OpenSSL exception, the license is available [here][license].
+---
 
-## Supported systems
+## О проекте
 
-The latest version is available for
+**ZenDesktop** — форк официального клиента Telegram Desktop, сфокусированный на приватности, расширенном контроле над сессией, эргономике интерфейса в стиле Material 3 Expressive и автономной инфраструктуре обновлений.
 
-* [Windows 7 and above (64 bit)](https://telegram.org/dl/desktop/win64) ([portable](https://telegram.org/dl/desktop/win64_portable))
-* [Windows 7 and above (32 bit)](https://telegram.org/dl/desktop/win) ([portable](https://telegram.org/dl/desktop/win_portable))
-* [macOS 10.13 and above](https://telegram.org/dl/desktop/mac)
-* [Linux static build for 64 bit](https://telegram.org/dl/desktop/linux)
-* [Snap](https://snapcraft.io/telegram-desktop)
-* [Flatpak](https://flathub.org/apps/details/org.telegram.desktop)
+Сайт проекта: [creamblyy.github.io/ZenDesktop](https://creamblyy.github.io/ZenDesktop/)
 
-## Old system versions
+---
 
-Version **4.9.9** was the last that supports older systems
+## Ключевой функционал
 
-* [macOS 10.12](https://updates.tdesktop.com/tmac/tsetup.4.9.9.dmg)
-* [Linux with glibc < 2.28 static build](https://updates.tdesktop.com/tlinux/tsetup.4.9.9.tar.xz)
+- **RelayHooks Subsystem:**
+  - **Anti-Recall:** локальное сохранение удалённых собеседниками сообщений с визуальной индикацией удаления.
+  - **Ghost Mode:** полноценный скрытый режим (блокировка отправки сетевых событий `sendTyping` и скрытие отметок прочтения входящих сообщений).
+- **ZenBadges:**
+  - Система кастомных векторных 8-лепестковых розеток верификации (`desktop`, `dev`, `staff`, `supporter`) с нативным рендерингом в заголовках и чатах.
+- **OTA Автообновление:**
+  - Встроенный автономный модуль проверки релизов (`Relay::ZenUpdater`), оповещения пользователя о новых версиях и фоновой установки обновлений.
+- **Интерфейс и эргономика:**
+  - Material 3 Expressive скругления бабблов сообщений (24px для внешних углов, 8px для смежных).
+  - Выделенный раздел параметров в меню настроек Telegram.
 
-Version **2.4.4** was the last that supports older systems
+---
 
-* [OS X 10.10 and 10.11](https://updates.tdesktop.com/tosx/tsetup-osx.2.4.4.dmg)
-* [Linux static build for 32 bit](https://updates.tdesktop.com/tlinux32/tsetup32.2.4.4.tar.xz)
+## Установка и релизы
 
-Version **1.8.15** was the last that supports older systems
+Готовые сборки для Windows x64 доступны на странице [GitHub Releases](https://github.com/creamblyy/ZenDesktop/releases).
 
-* [Windows XP and Vista](https://updates.tdesktop.com/tsetup/tsetup.1.8.15.exe) ([portable](https://updates.tdesktop.com/tsetup/tportable.1.8.15.zip))
-* [OS X 10.8 and 10.9](https://updates.tdesktop.com/tmac/tsetup.1.8.15.dmg)
-* [OS X 10.6 and 10.7](https://updates.tdesktop.com/tmac32/tsetup32.1.8.15.dmg)
+1. Перейдите в [Releases](https://github.com/creamblyy/ZenDesktop/releases).
+2. Скачайте архив `ZenDesktop-Windows-x64.zip`.
+3. Распакуйте и запустите `Telegram.exe`.
 
-## Third-party
+---
 
-* Qt 6 ([LGPL](http://doc.qt.io/qt-6/lgpl.html)) and Qt 5.15 ([LGPL](http://doc.qt.io/qt-5/lgpl.html)) slightly patched
-* OpenSSL 3.2.1 ([Apache License 2.0](https://openssl-library.org/source/license/apache-license-2.0.txt))
-* WebRTC ([New BSD License](https://github.com/desktop-app/tg_owt/blob/master/LICENSE))
-* zlib ([zlib License](http://www.zlib.net/zlib_license.html))
-* LZMA SDK 9.20 ([public domain](http://www.7-zip.org/sdk.html))
-* liblzma ([public domain](http://tukaani.org/xz/))
-* Google Breakpad ([License](https://chromium.googlesource.com/breakpad/breakpad/+/master/LICENSE))
-* Google Crashpad ([Apache License 2.0](https://chromium.googlesource.com/crashpad/crashpad/+/master/LICENSE))
-* GYP ([BSD License](https://github.com/bnoordhuis/gyp/blob/master/LICENSE))
-* Ninja ([Apache License 2.0](https://github.com/ninja-build/ninja/blob/master/COPYING))
-* OpenAL Soft ([LGPL](https://github.com/kcat/openal-soft/blob/master/COPYING))
-* Opus codec ([BSD License](http://www.opus-codec.org/license/))
-* FFmpeg ([LGPL](https://www.ffmpeg.org/legal.html))
-* Guideline Support Library ([MIT License](https://github.com/Microsoft/GSL/blob/master/LICENSE))
-* Range-v3 ([Boost License](https://github.com/ericniebler/range-v3/blob/master/LICENSE.txt))
-* Open Sans font ([Apache License 2.0](http://www.apache.org/licenses/LICENSE-2.0.html))
-* Vazirmatn font ([SIL Open Font License 1.1](https://github.com/rastikerdar/vazirmatn/blob/master/OFL.txt))
-* Emoji alpha codes ([MIT License](https://github.com/emojione/emojione/blob/master/extras/alpha-codes/LICENSE.md))
-* xxHash ([BSD License](https://github.com/Cyan4973/xxHash/blob/dev/LICENSE))
-* QR Code generator ([MIT License](https://github.com/nayuki/QR-Code-generator#license))
-* CMake ([New BSD License](https://github.com/Kitware/CMake/blob/master/Copyright.txt))
-* Hunspell ([LGPL](https://github.com/hunspell/hunspell/blob/master/COPYING.LESSER))
-* zxcvbn-c ([MIT License](https://github.com/tsyrogit/zxcvbn-c/blob/master/LICENSE.txt))
-* twidget ([BSD 3-Clause License](https://github.com/TelegramMessenger/twidget/blob/main/LICENSE))
-* litehtml ([BSD 3-Clause License](https://github.com/litehtml/litehtml/blob/master/LICENSE))
-* Gumbo ([Apache License 2.0](https://github.com/google/gumbo-parser/blob/master/COPYING))
-* QuickJS-ng ([MIT License](https://github.com/quickjs-ng/quickjs/blob/master/LICENSE))
-* FrequencyWords by Hermit Dave ([Creative Commons Attribution-ShareAlike 4.0](https://creativecommons.org/licenses/by-sa/4.0/))
+## Сборка из исходников
 
-## Build instructions
+### Требования
+- Windows 10 / 11 (x64)
+- Visual Studio 2022 (MSVC v143, Desktop C++, Windows 10/11 SDK)
+- Python 3.10+
+- Git, CMake 3.25+, Ninja
 
-* [Windows (32-bit and 64-bit)][win]
-* [macOS][mac]
-* [GNU/Linux using Docker][linux]
+### Автоматическая сборка
+Сборка выполняется автоматически через GitHub Actions workflow [build-zendesktop.yml](.github/workflows/build-zendesktop.yml). Артефакт `ZenDesktop-Windows-x64` генерируется на чистом runner'е Windows Server 2022 и доступен для скачивания в разделе Actions.
 
-[//]: # (LINKS)
-[telegram]: https://telegram.org
-[telegram_desktop]: https://desktop.telegram.org
-[telegram_api]: https://core.telegram.org
-[telegram_proto]: https://core.telegram.org/mtproto
-[license]: LICENSE
-[win]: docs/building-win.md
-[mac]: docs/building-mac.md
-[linux]: docs/building-linux.md
-[preview_image]: https://github.com/telegramdesktop/tdesktop/blob/dev/docs/assets/preview.png "Preview of Telegram Desktop"
-[preview_image_url]: https://raw.githubusercontent.com/telegramdesktop/tdesktop/dev/docs/assets/preview.png
+---
 
-## Thanks to
+## Контрибьюторы
 
-<a href="https://depot.dev">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://depot.dev/assets/brand/1693758816/depot-logo-horizontal-on-dark.svg">
-    <source media="(prefers-color-scheme: light)" srcset="https://depot.dev/assets/brand/1693758816/depot-logo-horizontal-on-light.svg">
-    <img alt="Depot" src="https://depot.dev/assets/brand/1693758816/depot-logo-horizontal-on-light.svg" width="150">
-  </picture>
-</a>
+- [creamblyy](https://github.com/creamblyy) — создатель, мейнтейнер и ведущий разработчик (Lead Developer / Maintainer).
 
-CI infrastructure sponsored by [Depot](https://depot.dev) — fast GitHub Actions runners.
+---
 
+## Лицензия
+
+Исходный код проекта распространяется под лицензией **GNU General Public License v3.0** с исключением OpenSSL (GPLv3 with OpenSSL Exception). Подробный текст лицензии доступен в файле [LICENSE](LICENSE).

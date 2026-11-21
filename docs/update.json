@@ -1,0 +1,15 @@
+{
+  "version": "1.0.0",
+  "version_code": 10000,
+  "url": "https://github.com/creamblyy/ZenDesktop/releases/latest/download/ZenDesktop.exe",
+  "sha256": "",
+  "release_date": "2026-11-21",
+  "changelog": [
+    "Первый публичный релиз ZenDesktop (Windows x64)",
+    "Anti-Recall: сохранение удаленных собеседником сообщений",
+    "Ghost Mode: скрытие статуса набора текста и отчетов о прочтении",
+    "Система значков верификации RelayHooks (dev, staff, supporter, desktop)",
+    "Expressive Material 3 скругления баблов сообщений (24px / 8px)",
+    "Система OTA фоновых автообновлений через GitHub"
+  ]
+}
