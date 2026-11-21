@@ -16,6 +16,13 @@ namespace Data {
 class DocumentMedia;
 } // namespace Data
 
+namespace Ui {
+class ScrollArea;
+class RpWidget;
+class FlatLabel;
+class IconButton;
+} // namespace Ui
+
 namespace Relay {
 
 struct LyricLine {
@@ -64,7 +71,7 @@ private:
 	QWidget *_rightCol = nullptr;
 	Ui::ScrollArea *_scroll = nullptr;
 	QWidget *_lyricsContainer = nullptr;
-	std::vector<QWidget*> _lineWidgets;
+	std::vector<Ui::FlatLabel*> _lineWidgets;
 
 	Ui::RpWidget *_cover = nullptr;
 	Ui::FlatLabel *_titleLabel = nullptr;

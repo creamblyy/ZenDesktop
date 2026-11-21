@@ -316,11 +316,11 @@ void ZenLyricsBox::setupContent() {
 		auto &settings = Core::App().settings();
 		settings.setPlayerRepeatMode([&] {
 			switch (settings.playerRepeatMode()) {
-			case RepeatMode::None: return RepeatMode::One;
-			case RepeatMode::One: return RepeatMode::All;
-			case RepeatMode::All: return RepeatMode::None;
+			case Media::RepeatMode::None: return Media::RepeatMode::One;
+			case Media::RepeatMode::One: return Media::RepeatMode::All;
+			case Media::RepeatMode::All: return Media::RepeatMode::None;
 			}
-			return RepeatMode::None;
+			return Media::RepeatMode::None;
 		}());
 		Core::App().saveSettingsDelayed();
 	});
@@ -529,7 +529,7 @@ void ZenLyricsBox::updateActiveLine(float64 seconds) {
 
 	if (activeIdx != _activeLineIdx) {
 		if (_activeLineIdx >= 0 && _activeLineIdx < int(_lineWidgets.size())) {
-			if (const auto oldLabel = qobject_cast<Ui::FlatLabel*>(_lineWidgets[_activeLineIdx])) {
+			if (const auto oldLabel = _lineWidgets[_activeLineIdx]) {
 				oldLabel->setTextColorOverride(QColor(100, 115, 130));
 				oldLabel->setFont(st::normalFont);
 			}
@@ -538,7 +538,7 @@ void ZenLyricsBox::updateActiveLine(float64 seconds) {
 		_activeLineIdx = activeIdx;
 
 		if (_activeLineIdx >= 0 && _activeLineIdx < int(_lineWidgets.size())) {
-			if (const auto newLabel = qobject_cast<Ui::FlatLabel*>(_lineWidgets[_activeLineIdx])) {
+			if (const auto newLabel = _lineWidgets[_activeLineIdx]) {
 				newLabel->setTextColorOverride(QColor(255, 255, 255));
 				newLabel->setFont(st::semiboldFont);
 
