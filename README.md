@@ -65,7 +65,13 @@
 
 ## Контрибьюторы
 
-- [creamblyy](https://github.com/creamblyy) — создатель, мейнтейнер и ведущий разработчик (Lead Developer / Maintainer).
+<p align="left">
+  <a href="https://github.com/creamblyy">
+    <img src="https://github.com/creamblyy.png" width="64" height="64" style="border-radius: 50%;" alt="creamblyy" />
+  </a>
+  <br>
+  <b><a href="https://github.com/creamblyy">@creamblyy</a></b> — создатель, мейнтейнер и ведущий разработчик (Lead Developer / Maintainer).
+</p>
 
 ---
 
