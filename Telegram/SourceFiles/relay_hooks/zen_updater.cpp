@@ -70,6 +70,21 @@ bool ZenUpdater::isChecking() const {
 	return _isChecking;
 }
 
+bool ZenUpdater::isAutoCheckEnabled() const {
+	return _autoCheck;
+}
+
+void ZenUpdater::setAutoCheckEnabled(bool enabled) {
+	_autoCheck = enabled;
+	if (enabled) {
+		if (!_checkTimer.isActive()) {
+			_checkTimer.start(kCheckIntervalMs);
+		}
+	} else {
+		_checkTimer.stop();
+	}
+}
+
 void ZenUpdater::checkForUpdates(bool manual) {
 	if (_isChecking) {
 		return;

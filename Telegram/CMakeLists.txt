@@ -132,9 +132,6 @@ if (NOT DESKTOP_APP_DISABLE_SWIFT6)
 endif()
 
 target_precompile_headers(Telegram PRIVATE $<$<COMPILE_LANGUAGE:CXX,OBJCXX>:${src_loc}/stdafx.h>)
-if (MSVC)
-    target_compile_options(Telegram PRIVATE /Zm200)
-endif()
 nice_target_sources(Telegram ${src_loc}
 PRIVATE
     ${style_files}

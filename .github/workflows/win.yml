@@ -4,6 +4,7 @@ on:
   push:
     # Pushes to the canary or private-ci branches run their own workflows.
     branches-ignore:
+      - dev
       - public-canary
       - private-canary
       - 'private-ci/**'

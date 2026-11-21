@@ -37,6 +37,8 @@ public:
 	[[nodiscard]] const QString &currentVersion() const;
 	[[nodiscard]] int currentVersionCode() const;
 	[[nodiscard]] bool isChecking() const;
+	[[nodiscard]] bool isAutoCheckEnabled() const;
+	void setAutoCheckEnabled(bool enabled);
 
 private:
 	ZenUpdater();
@@ -52,6 +54,7 @@ private:
 	QTimer _checkTimer;
 	bool _isChecking = false;
 	bool _updateAvailable = false;
+	bool _autoCheck = true;
 	ZenUpdateInfo _availableUpdate;
 };
 

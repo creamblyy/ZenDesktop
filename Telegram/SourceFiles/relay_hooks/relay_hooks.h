@@ -61,12 +61,31 @@ public:
 	[[nodiscard]] bool isHidePhoneNumberEnabled() const;
 	void setHidePhoneNumberEnabled(bool enabled);
 
+	[[nodiscard]] bool isHideSensitiveMediaEnabled() const;
+	void setHideSensitiveMediaEnabled(bool enabled);
+
+	[[nodiscard]] bool isStreamerModeEnabled() const;
+	void setStreamerModeEnabled(bool enabled);
+
 	// Appearance & Material 3
 	[[nodiscard]] bool isTimeWithSecondsEnabled() const;
 	void setTimeWithSecondsEnabled(bool enabled);
+	[[nodiscard]] bool isShowSecondsEnabled() const;
+	void setShowSecondsEnabled(bool enabled);
+
+	[[nodiscard]] bool isSwissMotionEnabled() const;
+	void setSwissMotionEnabled(bool enabled);
+
+	[[nodiscard]] bool isHideMuteIconEnabled() const;
+	void setHideMuteIconEnabled(bool enabled);
+
+	[[nodiscard]] bool isCustomBubbleColorEnabled() const;
+	void setCustomBubbleColorEnabled(bool enabled);
 
 	[[nodiscard]] bool isGreetingStickerDisabled() const;
 	void setGreetingStickerDisabled(bool disabled);
+	[[nodiscard]] bool isCleanStickersEnabled() const;
+	void setCleanStickersEnabled(bool enabled);
 
 	[[nodiscard]] bool isShowPeerIdEnabled() const;
 	void setShowPeerIdEnabled(bool enabled);
@@ -134,7 +153,12 @@ private:
 	bool _storiesStealth = false;
 	bool _noSponsored = true; // Block ads by default
 	bool _hidePhoneNumber = false;
+	bool _hideSensitiveMedia = false;
+	bool _streamerMode = false;
 	bool _timeWithSeconds = false;
+	bool _swissMotion = true;
+	bool _hideMuteIcon = false;
+	bool _customBubbleColor = false;
 	bool _greetingStickerDisabled = false;
 	bool _showPeerId = true;
 	bool _material3Bubbles = true;

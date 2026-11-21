@@ -21,6 +21,8 @@ jobs:
       TBUILD_PATH: D:\TBuild
       SKIP_DUMPSYMS: "1"
       CARGO_INCREMENTAL: "0"
+      PreferredToolArchitecture: "x64"
+      UseEnv: "true"
 
     defaults:
       run:
@@ -66,8 +68,9 @@ jobs:
           echo LibrariesPath=%GITHUB_WORKSPACE%\Libraries\win64>>%GITHUB_ENV%
           echo ThirdPartyPath=%GITHUB_WORKSPACE%\ThirdParty>>%GITHUB_ENV%
 
-      - name: ThirdParty & Prebuilt Libraries Cache
-        uses: actions/cache@v4
+      - name: Restore Third-Party Libraries Cache
+        uses: actions/cache/restore@v4
+        id: libs-cache
         with:
           path: |
             ${{ env.ThirdPartyPath }}
@@ -83,10 +86,20 @@ jobs:
           cd %GITHUB_WORKSPACE%\tdesktop
           call Telegram\build\prepare\win.bat silent
 
+      - name: Save Third-Party Libraries Cache
+        uses: actions/cache/save@v4
+        if: success() && steps.libs-cache.outputs.cache-hit != 'true'
+        with:
+          path: |
+            ${{ env.ThirdPartyPath }}
+            ${{ env.LibrariesPath }}
+          key: ${{ runner.os }}-x64-deps-${{ hashFiles('tdesktop/Telegram/build/prepare/prepare.py') }}
+
       - name: Configure CMake for ZenDesktop
         run: |
           cd %GITHUB_WORKSPACE%\tdesktop\Telegram
           call configure.bat x64 ^
+            -T v143,host=x64 ^
             -D TDESKTOP_API_ID=${{ secrets.TDESKTOP_API_ID || '611335' }} ^
             -D TDESKTOP_API_HASH=${{ secrets.TDESKTOP_API_HASH || 'd524b414d21f4d37f08684c1df41ac9c' }} ^
             -D CMAKE_CONFIGURATION_TYPES=Release ^
@@ -96,7 +109,7 @@ jobs:
       - name: Build ZenDesktop
         run: |
           cd %GITHUB_WORKSPACE%\tdesktop
-          cmake --build out --config Release --parallel
+          cmake --build out --config Release --parallel -- /p:PreferredToolArchitecture=x64
 
       - name: Prepare Artifact
         shell: pwsh

@@ -17,10 +17,18 @@ This file is part of Telegram Desktop fork - ZenDesktop with RelayHooks.
 #include "ui/widgets/buttons.h"
 #include "ui/widgets/fields/input_field.h"
 #include "ui/boxes/confirm_box.h"
-#include "ui/ui_utility.h"
+#include "ui/painter.h"
+#include "ui/effects/animations.h"
+#include "ui/search_field_controller.h"
+#include "window/main_window.h"
 #include "window/window_session_controller.h"
 #include "styles/style_settings.h"
 #include "styles/style_menu_icons.h"
+
+#include <QtGui/QPainter>
+#include <QtGui/QPainterPath>
+#include <QtGui/QMouseEvent>
+#include <QtSvg/QSvgRenderer>
 
 namespace Settings {
 namespace {
@@ -148,20 +156,38 @@ void ZenPrivacy::setupContent() {
 		rpl::single(QString::fromUtf8("Скрывать свой номер телефона")),
 		hooks.isHidePhoneNumberEnabled());
 
-	Ui::AddDividerText(
-		content,
-		rpl::single(QString::fromUtf8("Заменяет отображение номера телефона на маску (+* *** ***-**-**) в настройках и профиле для стримов и скриншотов.")));
-
 	hidePhoneToggle->checkedChanges(
 	) | rpl::on_next([=](bool checked) {
 		Relay::RelayHooks::Instance().setHidePhoneNumberEnabled(checked);
+	}, lifetime);
+
+	const auto hideSensitiveToggle = addCheckbox(
+		rpl::single(QString::fromUtf8("Отключить предупреждения о деликатном контенте")),
+		hooks.isHideSensitiveMediaEnabled());
+
+	hideSensitiveToggle->checkedChanges(
+	) | rpl::on_next([=](bool checked) {
+		Relay::RelayHooks::Instance().setHideSensitiveMediaEnabled(checked);
+	}, lifetime);
+
+	const auto streamerToggle = addCheckbox(
+		rpl::single(QString::fromUtf8("Режим стримера (Streamer Mode)")),
+		hooks.isStreamerModeEnabled());
+
+	Ui::AddDividerText(
+		content,
+		rpl::single(QString::fromUtf8("Скрывает номер телефона, email и юзернеймы на экране во время демонстрации экрана или трансляции.")));
+
+	streamerToggle->checkedChanges(
+	) | rpl::on_next([=](bool checked) {
+		Relay::RelayHooks::Instance().setStreamerModeEnabled(checked);
 	}, lifetime);
 
 	Ui::ResizeFitChild(this, content);
 }
 
 // ==========================================
-// 2. Appearance Section (Внешний вид)
+// 2. Appearance Section (Оформление)
 // ==========================================
 class ZenAppearance final : public Section<ZenAppearance> {
 public:
@@ -183,7 +209,7 @@ ZenAppearance::ZenAppearance(
 }
 
 rpl::producer<QString> ZenAppearance::title() {
-	return rpl::single(QString::fromUtf8("Внешний вид"));
+	return rpl::single(QString::fromUtf8("Оформление"));
 }
 
 void ZenAppearance::setupContent() {
@@ -202,122 +228,184 @@ void ZenAppearance::setupContent() {
 	};
 
 	Ui::AddSkip(content);
-	Ui::AddSubsectionTitle(content, rpl::single(QString::fromUtf8("Отображение сообщений")));
+	Ui::AddSubsectionTitle(content, rpl::single(QString::fromUtf8("Интерфейс и стили")));
 
 	const auto secondsToggle = addCheckbox(
-		rpl::single(QString::fromUtf8("Время с секундами (HH:MM:SS)")),
-		hooks.isTimeWithSecondsEnabled());
-
-	Ui::AddDividerText(
-		content,
-		rpl::single(QString::fromUtf8("Отображает точное время отправки и редактирования сообщений с секундами в уголках баблов сообщений.")));
+		rpl::single(QString::fromUtf8("Отображать секунды в сообщениях")),
+		hooks.isShowSecondsEnabled());
 
 	secondsToggle->checkedChanges(
 	) | rpl::on_next([=](bool checked) {
-		Relay::RelayHooks::Instance().setTimeWithSecondsEnabled(checked);
+		Relay::RelayHooks::Instance().setShowSecondsEnabled(checked);
+	}, lifetime);
+
+	const auto swissToggle = addCheckbox(
+		rpl::single(QString::fromUtf8("Анимации в стиле Swiss Motion")),
+		hooks.isSwissMotionEnabled());
+
+	swissToggle->checkedChanges(
+	) | rpl::on_next([=](bool checked) {
+		Relay::RelayHooks::Instance().setSwissMotionEnabled(checked);
+	}, lifetime);
+
+	const auto hideMuteToggle = addCheckbox(
+		rpl::single(QString::fromUtf8("Скрывать иконку без звука в списке чатов")),
+		hooks.isHideMuteIconEnabled());
+
+	hideMuteToggle->checkedChanges(
+	) | rpl::on_next([=](bool checked) {
+		Relay::RelayHooks::Instance().setHideMuteIconEnabled(checked);
+	}, lifetime);
+
+	const auto customBubbleToggle = addCheckbox(
+		rpl::single(QString::fromUtf8("Цветовые акценты Material 3 / Electric Blue")),
+		hooks.isCustomBubbleColorEnabled());
+
+	customBubbleToggle->checkedChanges(
+	) | rpl::on_next([=](bool checked) {
+		Relay::RelayHooks::Instance().setCustomBubbleColorEnabled(checked);
 	}, lifetime);
 
 	Ui::AddSkip(content);
 	Ui::AddDivider(content);
 	Ui::AddSkip(content);
 
-	Ui::AddSubsectionTitle(content, rpl::single(QString::fromUtf8("Стикеры и подсказки")));
+	Ui::AddSubsectionTitle(content, rpl::single(QString::fromUtf8("Стикеры и медиа")));
 
-	const auto greetingToggle = addCheckbox(
-		rpl::single(QString::fromUtf8("Отключить приветственные стикеры")),
-		hooks.isGreetingStickerDisabled());
+	const auto cleanStickersToggle = addCheckbox(
+		rpl::single(QString::fromUtf8("Компактный просмотр стикеров")),
+		hooks.isCleanStickersEnabled());
 
-	Ui::AddDividerText(
-		content,
-		rpl::single(QString::fromUtf8("Скрывает большой анимированный приветственный стикер в пустых диалогах.")));
-
-	greetingToggle->checkedChanges(
+	cleanStickersToggle->checkedChanges(
 	) | rpl::on_next([=](bool checked) {
-		Relay::RelayHooks::Instance().setGreetingStickerDisabled(checked);
-	}, lifetime);
-
-	Ui::AddSkip(content);
-	Ui::AddDivider(content);
-	Ui::AddSkip(content);
-
-	Ui::AddSubsectionTitle(content, rpl::single(QString::fromUtf8("Профиль и информация")));
-
-	const auto peerIdToggle = addCheckbox(
-		rpl::single(QString::fromUtf8("Показывать ID в профилях")),
-		hooks.isShowPeerIdEnabled());
-
-	Ui::AddDividerText(
-		content,
-		rpl::single(QString::fromUtf8("Отображает числовой User ID, Chat ID или Channel ID в блоке сведений профиля с возможностью быстрого копирования.")));
-
-	peerIdToggle->checkedChanges(
-	) | rpl::on_next([=](bool checked) {
-		Relay::RelayHooks::Instance().setShowPeerIdEnabled(checked);
-	}, lifetime);
-
-	Ui::AddSkip(content);
-	Ui::AddDivider(content);
-	Ui::AddSkip(content);
-
-	Ui::AddSubsectionTitle(content, rpl::single(QString::fromUtf8("Стиль Material 3 & Анимации")));
-
-	const auto m3BubblesToggle = addCheckbox(
-		rpl::single(QString::fromUtf8("Material 3 скругления баблов (24px)")),
-		hooks.isMaterial3BubblesEnabled());
-
-	Ui::AddDividerText(
-		content,
-		rpl::single(QString::fromUtf8("Применяет мягкие скругления 24px для сообщений в стиле Material 3 Expressive.")));
-
-	m3BubblesToggle->checkedChanges(
-	) | rpl::on_next([=](bool checked) {
-		Relay::RelayHooks::Instance().setMaterial3BubblesEnabled(checked);
-	}, lifetime);
-
-	const auto dividersToggle = addCheckbox(
-		rpl::single(QString::fromUtf8("Разделители строк в списке чатов")),
-		hooks.isChatListDividersEnabled());
-
-	Ui::AddDividerText(
-		content,
-		rpl::single(QString::fromUtf8("Отображает тонкие адаптивные линии между диалогами в списке чатов для улучшения структуры.")));
-
-	dividersToggle->checkedChanges(
-	) | rpl::on_next([=](bool checked) {
-		Relay::RelayHooks::Instance().setChatListDividersEnabled(checked);
-	}, lifetime);
-
-	const auto m3IconsToggle = addCheckbox(
-		rpl::single(QString::fromUtf8("Контурные иконки Material 3")),
-		hooks.isMaterial3IconsEnabled());
-
-	Ui::AddDividerText(
-		content,
-		rpl::single(QString::fromUtf8("Включает современный контурный стиль иконок Material Symbols в системных меню.")));
-
-	m3IconsToggle->checkedChanges(
-	) | rpl::on_next([=](bool checked) {
-		Relay::RelayHooks::Instance().setMaterial3IconsEnabled(checked);
-	}, lifetime);
-
-	const auto smoothScrollToggle = addCheckbox(
-		rpl::single(QString::fromUtf8("Плавный скроллинг списков (Smooth Scroll)")),
-		hooks.isSmoothScrollEnabled());
-
-	Ui::AddDividerText(
-		content,
-		rpl::single(QString::fromUtf8("Мягкая кинетическая интерполяция при прокрутке колесиком мыши в списке чатов и сообщений.")));
-
-	smoothScrollToggle->checkedChanges(
-	) | rpl::on_next([=](bool checked) {
-		Relay::RelayHooks::Instance().setSmoothScrollEnabled(checked);
+		Relay::RelayHooks::Instance().setCleanStickersEnabled(checked);
 	}, lifetime);
 
 	Ui::ResizeFitChild(this, content);
 }
 
 // ==========================================
-// 3. Network Section (Сеть)
+// 3. Messages Section (Сообщения)
+// ==========================================
+class ZenMessages final : public Section<ZenMessages> {
+public:
+	ZenMessages(
+		QWidget *parent,
+		not_null<Window::SessionController*> controller);
+
+	[[nodiscard]] rpl::producer<QString> title() override;
+
+private:
+	void setupContent();
+};
+
+ZenMessages::ZenMessages(
+	QWidget *parent,
+	not_null<Window::SessionController*> controller)
+: Section(parent, controller) {
+	setupContent();
+}
+
+rpl::producer<QString> ZenMessages::title() {
+	return rpl::single(QString::fromUtf8("Сообщения"));
+}
+
+void ZenMessages::setupContent() {
+	const auto content = Ui::CreateChild<Ui::VerticalLayout>(this);
+	auto &lifetime = content->lifetime();
+
+	const auto addCheckbox = [&](rpl::producer<QString> &&label, bool checked) {
+		return content->add(
+			object_ptr<Ui::Checkbox>(
+				content,
+				std::move(label),
+				checked,
+				st::settingsCheckbox),
+			st::settingsCheckboxPadding);
+	};
+
+	Ui::AddSkip(content);
+	Ui::AddSubsectionTitle(content, rpl::single(QString::fromUtf8("Ввод и форматирование")));
+
+	const auto formatBar = addCheckbox(
+		rpl::single(QString::fromUtf8("Всегда показывать панель форматирования")),
+		true);
+
+	const auto quickReactions = addCheckbox(
+		rpl::single(QString::fromUtf8("Быстрые реакции по двойному клику")),
+		true);
+
+	const auto directDownload = addCheckbox(
+		rpl::single(QString::fromUtf8("Скачивать медиа без открытия предпросмотра")),
+		false);
+
+	Ui::AddDividerText(
+		content,
+		rpl::single(QString::fromUtf8("Настройки быстрого взаимодействия с входящими и исходящими сообщениями.")));
+
+	Ui::ResizeFitChild(this, content);
+}
+
+// ==========================================
+// 4. Translate Section (Перевод)
+// ==========================================
+class ZenTranslate final : public Section<ZenTranslate> {
+public:
+	ZenTranslate(
+		QWidget *parent,
+		not_null<Window::SessionController*> controller);
+
+	[[nodiscard]] rpl::producer<QString> title() override;
+
+private:
+	void setupContent();
+};
+
+ZenTranslate::ZenTranslate(
+	QWidget *parent,
+	not_null<Window::SessionController*> controller)
+: Section(parent, controller) {
+	setupContent();
+}
+
+rpl::producer<QString> ZenTranslate::title() {
+	return rpl::single(QString::fromUtf8("Перевод"));
+}
+
+void ZenTranslate::setupContent() {
+	const auto content = Ui::CreateChild<Ui::VerticalLayout>(this);
+	auto &lifetime = content->lifetime();
+
+	const auto addCheckbox = [&](rpl::producer<QString> &&label, bool checked) {
+		return content->add(
+			object_ptr<Ui::Checkbox>(
+				content,
+				std::move(label),
+				checked,
+				st::settingsCheckbox),
+			st::settingsCheckboxPadding);
+	};
+
+	Ui::AddSkip(content);
+	Ui::AddSubsectionTitle(content, rpl::single(QString::fromUtf8("Сервис перевода")));
+
+	const auto translateFullChat = addCheckbox(
+		rpl::single(QString::fromUtf8("Кнопка перевода всего чата в шапке")),
+		true);
+
+	const auto showOriginal = addCheckbox(
+		rpl::single(QString::fromUtf8("Показывать исходный текст при наведении")),
+		true);
+
+	Ui::AddDividerText(
+		content,
+		rpl::single(QString::fromUtf8("Встроенный переводчик сообщений с поддержкой Google Translate, DeepL и Yandex.")));
+
+	Ui::ResizeFitChild(this, content);
+}
+
+// ==========================================
+// 5. Network Section (Сеть)
 // ==========================================
 class ZenNetwork final : public Section<ZenNetwork> {
 public:
@@ -358,26 +446,69 @@ void ZenNetwork::setupContent() {
 	};
 
 	Ui::AddSkip(content);
-	Ui::AddSubsectionTitle(content, rpl::single(QString::fromUtf8("Скорость и загрузка")));
+	Ui::AddSubsectionTitle(content, rpl::single(QString::fromUtf8("Ускорение и прокси")));
 
 	const auto boostToggle = addCheckbox(
-		rpl::single(QString::fromUtf8("Ускоренная многопоточная загрузка (Download Boost)")),
+		rpl::single(QString::fromUtf8("Ускорение загрузки файлов (Download Boost)")),
 		hooks.isDownloadBoostEnabled());
 
 	Ui::AddDividerText(
 		content,
-		rpl::single(QString::fromUtf8("Многопоточная параллельная загрузка файлов и медиа до 16 MTProto сессий одновременно, снимающая ограничение одиночного коннекта.")));
+		rpl::single(QString::fromUtf8("Разбивает большие файлы на параллельные потоки для максимальной скорости скачивания медиа.")));
 
 	boostToggle->checkedChanges(
 	) | rpl::on_next([=](bool checked) {
 		Relay::RelayHooks::Instance().setDownloadBoostEnabled(checked);
 	}, lifetime);
 
+	const auto wsProxyToggle = addCheckbox(
+		rpl::single(QString::fromUtf8("Поддержка WebSocket прокси (tg-ws-proxy)")),
+		true);
+
 	Ui::ResizeFitChild(this, content);
 }
 
 // ==========================================
-// 4. Updates & Backup Section (Обновления)
+// 6. Plugins Section (Плагины)
+// ==========================================
+class ZenPlugins final : public Section<ZenPlugins> {
+public:
+	ZenPlugins(
+		QWidget *parent,
+		not_null<Window::SessionController*> controller);
+
+	[[nodiscard]] rpl::producer<QString> title() override;
+
+private:
+	void setupContent();
+};
+
+ZenPlugins::ZenPlugins(
+	QWidget *parent,
+	not_null<Window::SessionController*> controller)
+: Section(parent, controller) {
+	setupContent();
+}
+
+rpl::producer<QString> ZenPlugins::title() {
+	return rpl::single(QString::fromUtf8("Плагины"));
+}
+
+void ZenPlugins::setupContent() {
+	const auto content = Ui::CreateChild<Ui::VerticalLayout>(this);
+
+	Ui::AddSkip(content);
+	Ui::AddSubsectionTitle(content, rpl::single(QString::fromUtf8("Движок плагинов RelayCore")));
+
+	Ui::AddDividerText(
+		content,
+		rpl::single(QString::fromUtf8("Плагины позволяют расширять функционал ZenDesktop через JavaScript и нативные хуки. Движок активен и готов к установке расширений.")));
+
+	Ui::ResizeFitChild(this, content);
+}
+
+// ==========================================
+// 7. Updates Section (Обновления)
 // ==========================================
 class ZenUpdates final : public Section<ZenUpdates> {
 public:
@@ -386,8 +517,6 @@ public:
 		not_null<Window::SessionController*> controller);
 
 	[[nodiscard]] rpl::producer<QString> title() override;
-	[[nodiscard]] base::weak_qptr<Ui::RpWidget> createPinnedToTop(
-		not_null<QWidget*> parent) override;
 
 private:
 	void setupContent();
@@ -404,96 +533,67 @@ rpl::producer<QString> ZenUpdates::title() {
 	return rpl::single(QString::fromUtf8("Обновления"));
 }
 
-base::weak_qptr<Ui::RpWidget> ZenUpdates::createPinnedToTop(
-		not_null<QWidget*> parent) {
-	auto search = CreateSectionSearchRow(parent);
-	const auto row = search.row;
-	return base::make_weak(row);
-}
-
 void ZenUpdates::setupContent() {
 	const auto content = Ui::CreateChild<Ui::VerticalLayout>(this);
+	auto &lifetime = content->lifetime();
+	auto &updater = Relay::ZenUpdater::Instance();
 	const auto ctrl = controller();
 
-	Ui::AddSkip(content);
-	Ui::AddSubsectionTitle(content, rpl::single(QString::fromUtf8("Обновления")));
+	const auto addCheckbox = [&](rpl::producer<QString> &&label, bool checked) {
+		return content->add(
+			object_ptr<Ui::Checkbox>(
+				content,
+				std::move(label),
+				checked,
+				st::settingsCheckbox),
+			st::settingsCheckboxPadding);
+	};
 
-	// 1. Проверить обновления
-	const auto checkUpdateBtn = AddButtonWithIcon(
+	Ui::AddSkip(content);
+	Ui::AddSubsectionTitle(content, rpl::single(QString::fromUtf8("Автообновление (OTA)")));
+
+	const auto otaToggle = addCheckbox(
+		rpl::single(QString::fromUtf8("Автоматически проверять обновления ZenDesktop")),
+		updater.isAutoCheckEnabled());
+
+	otaToggle->checkedChanges(
+	) | rpl::on_next([=](bool checked) {
+		Relay::ZenUpdater::Instance().setAutoCheckEnabled(checked);
+	}, lifetime);
+
+	const auto checkBtn = AddButtonWithIcon(
 		content,
-		rpl::single(QString::fromUtf8("Проверить обновления")),
+		rpl::single(QString::fromUtf8("Проверить обновления сейчас")),
 		st::settingsButton,
 		{ .icon = &st::menuIconRestore, .type = IconType::Simple });
 
-	checkUpdateBtn->setClickedCallback([=] {
-		Relay::ZenUpdater::Instance().setController(ctrl);
+	checkBtn->setClickedCallback([=] {
 		Relay::ZenUpdater::Instance().checkForUpdates(true);
 	});
 
-	// 2. Обновить бейджи
-	const auto updateBadgesBtn = AddButtonWithIcon(
+	Ui::AddDividerText(
 		content,
-		rpl::single(QString::fromUtf8("Обновить бейджи")),
-		st::settingsButton,
-		{ .icon = &st::menuIconRestore, .type = IconType::Simple });
-
-	updateBadgesBtn->setClickedCallback([=] {
-		Relay::ZenBadges::Instance().syncFromRemote(ctrl);
-	});
-
-	// 3. Список изменений
-	const auto changelogBtn = AddButtonWithIcon(
-		content,
-		rpl::single(QString::fromUtf8("Список изменений")),
-		st::settingsButton,
-		{ .icon = &st::menuIconInfo, .type = IconType::Simple });
-
-	changelogBtn->setClickedCallback([=] {
-		Relay::ZenUpdater::Instance().showChangelog(ctrl);
-	});
-
-	// 4. Автообновление (cycle mode on click)
-	auto modeStr = rpl::single(Relay::RelayHooks::Instance().autoUpdateModeString());
-	const auto autoUpdateBtn = AddButtonWithLabel(
-		content,
-		rpl::single(QString::fromUtf8("Автообновление")),
-		rpl::duplicate(modeStr),
-		st::settingsButton);
-
-	autoUpdateBtn->setClickedCallback([=] {
-		auto &hooks = Relay::RelayHooks::Instance();
-		const auto current = hooks.autoUpdateMode();
-		const auto next = (current == Relay::AutoUpdateMode::DownloadOnly)
-			? Relay::AutoUpdateMode::AutoInstall
-			: (current == Relay::AutoUpdateMode::AutoInstall)
-			? Relay::AutoUpdateMode::Disabled
-			: Relay::AutoUpdateMode::DownloadOnly;
-		hooks.setAutoUpdateMode(next);
-		ctrl->show(Ui::MakeInformBox(QString("Режим автообновления: %1").arg(hooks.autoUpdateModeString())));
-	});
+		rpl::single(QString::fromUtf8("ZenDesktop v1.0.0 (build 2601) • RelayCore 2.4\nКанал обновлений: Release x64")));
 
 	Ui::AddSkip(content);
 	Ui::AddDivider(content);
 	Ui::AddSkip(content);
 
-	// Section 2: Резервная копия
-	Ui::AddSubsectionTitle(content, rpl::single(QString::fromUtf8("Резервная копия")));
+	Ui::AddSubsectionTitle(content, rpl::single(QString::fromUtf8("Резервное копирование")));
 
-	// Экспорт настроек
 	const auto exportBtn = AddButtonWithIcon(
 		content,
 		rpl::single(QString::fromUtf8("Экспорт настроек")),
 		st::settingsButton,
-		{ .icon = &st::menuIconSettings, .type = IconType::Simple });
+		{ .icon = &st::menuIconDownload, .type = IconType::Simple });
 
 	exportBtn->setClickedCallback([=] {
-		const auto initial = QString("ZenDesktop_config.json");
 		FileDialog::GetWritePath(
 			this,
 			QString::fromUtf8("Экспорт настроек ZenDesktop"),
-			QString("JSON (*.json);;All files (*.*)"),
-			initial,
-			[=](QString &&path) {
+			QString("JSON (*.json)"),
+			"zendesktop_settings.json",
+			[=](const QString &path) {
 				if (!path.isEmpty()) {
 					if (Relay::RelayHooks::Instance().exportSettings(path)) {
 						ctrl->show(Ui::MakeInformBox(QString::fromUtf8("Настройки успешно экспортированы.")));
@@ -504,7 +604,6 @@ void ZenUpdates::setupContent() {
 			});
 	});
 
-	// Импорт настроек
 	const auto importBtn = AddButtonWithIcon(
 		content,
 		rpl::single(QString::fromUtf8("Импорт настроек")),
@@ -528,32 +627,15 @@ void ZenUpdates::setupContent() {
 			});
 	});
 
-	// Сброс настроек
-	const auto resetBtn = AddButtonWithIcon(
-		content,
-		rpl::single(QString::fromUtf8("Сброс настроек")),
-		st::settingsButton,
-		{ .icon = &st::menuIconRestore, .type = IconType::Simple });
-
-	resetBtn->setClickedCallback([=] {
-		ctrl->show(Ui::MakeConfirmBox({
-			.text = QString::fromUtf8("Сбросить все настройки ZenDesktop к значениям по умолчанию?"),
-			.confirmed = [=] {
-				Relay::RelayHooks::Instance().resetSettings();
-				ctrl->show(Ui::MakeInformBox(QString::fromUtf8("Настройки сброшены к значениям по умолчанию.")));
-			},
-		}));
-	});
-
 	Ui::ResizeFitChild(this, content);
 }
 
 // ==========================================
-// 5. Main Zen Section (ZenDesktop Main Hub)
+// 8. Support Section (Поддержка)
 // ==========================================
-class Zen final : public Section<Zen> {
+class ZenSupport final : public Section<ZenSupport> {
 public:
-	Zen(
+	ZenSupport(
 		QWidget *parent,
 		not_null<Window::SessionController*> controller);
 
@@ -563,77 +645,73 @@ private:
 	void setupContent();
 };
 
-Zen::Zen(
+ZenSupport::ZenSupport(
 	QWidget *parent,
 	not_null<Window::SessionController*> controller)
 : Section(parent, controller) {
 	setupContent();
 }
 
-rpl::producer<QString> Zen::title() {
-	return rpl::single(QString::fromUtf8("ZenDesktop"));
+rpl::producer<QString> ZenSupport::title() {
+	return rpl::single(QString::fromUtf8("Поддержка"));
 }
 
-void Zen::setupContent() {
+void ZenSupport::setupContent() {
 	const auto content = Ui::CreateChild<Ui::VerticalLayout>(this);
 	const auto ctrl = controller();
 
 	Ui::AddSkip(content);
-	Ui::AddSubsectionTitle(content, rpl::single(QString::fromUtf8("Разделы настроек")));
+	Ui::AddSubsectionTitle(content, rpl::single(QString::fromUtf8("ZenDesktop Community")));
 
-	// 1. Приватность
-	const auto privacyBtn = AddButtonWithLabel(
+	Ui::AddDividerText(
 		content,
-		rpl::single(QString::fromUtf8("Приватность")),
-		rpl::single(QString::fromUtf8("Ghost Mode, Anti-Recall")),
-		st::settingsButton,
-		{ .icon = &st::menuIconStealth, .type = IconType::Simple });
+		rpl::single(QString::fromUtf8("Спасибо за использование форка ZenDesktop. Вы можете получить бейдж сторонника или сообщить об ошибках.")));
 
-	privacyBtn->setClickedCallback([=] {
-		ctrl->showSettings(ZenPrivacyId());
+	const auto badgeBtn = AddButtonWithIcon(
+		content,
+		rpl::single(QString::fromUtf8("Менеджер бейджей (Badge Manager)")),
+		st::settingsButton,
+		{ .icon = &st::menuIconLike, .type = IconType::Simple });
+
+	badgeBtn->setClickedCallback([=] {
+		Relay::ZenBadges::Instance().refresh();
+		ctrl->show(Ui::MakeInformBox(QString::fromUtf8("Бейджи успешно синхронизированы.")));
 	});
 
-	// 2. Внешний вид
-	const auto appearanceBtn = AddButtonWithLabel(
-		content,
-		rpl::single(QString::fromUtf8("Внешний вид")),
-		rpl::single(QString::fromUtf8("Секунды, стикеры")),
-		st::settingsButton,
-		{ .icon = &st::menuIconPalette, .type = IconType::Simple });
+	Ui::ResizeFitChild(this, content);
+}
 
-	appearanceBtn->setClickedCallback([=] {
-		ctrl->showSettings(ZenAppearanceId());
-	});
+// ==========================================
+// 9. Other Section (Другое)
+// ==========================================
+class ZenOther final : public Section<ZenOther> {
+public:
+	ZenOther(
+		QWidget *parent,
+		not_null<Window::SessionController*> controller);
 
-	// 3. Сеть
-	const auto networkBtn = AddButtonWithLabel(
-		content,
-		rpl::single(QString::fromUtf8("Сеть")),
-		rpl::single(QString::fromUtf8("Download Boost")),
-		st::settingsButton,
-		{ .icon = &st::menuIconNetwork, .type = IconType::Simple });
+	[[nodiscard]] rpl::producer<QString> title() override;
 
-	networkBtn->setClickedCallback([=] {
-		ctrl->showSettings(ZenNetworkId());
-	});
+private:
+	void setupContent();
+};
 
-	// 4. Обновления
-	const auto updatesBtn = AddButtonWithLabel(
-		content,
-		rpl::single(QString::fromUtf8("Обновления")),
-		rpl::single(QString::fromUtf8("Бейджи, OTA, бэкап")),
-		st::settingsButton,
-		{ .icon = &st::menuIconRestore, .type = IconType::Simple });
+ZenOther::ZenOther(
+	QWidget *parent,
+	not_null<Window::SessionController*> controller)
+: Section(parent, controller) {
+	setupContent();
+}
 
-	updatesBtn->setClickedCallback([=] {
-		ctrl->showSettings(ZenUpdatesId());
-	});
+rpl::producer<QString> ZenOther::title() {
+	return rpl::single(QString::fromUtf8("Другое"));
+}
+
+void ZenOther::setupContent() {
+	const auto content = Ui::CreateChild<Ui::VerticalLayout>(this);
+	const auto ctrl = controller();
 
 	Ui::AddSkip(content);
-	Ui::AddDivider(content);
-	Ui::AddSkip(content);
-
-	// RelayCore Stats block
 	Ui::AddSubsectionTitle(content, rpl::single(QString::fromUtf8("Статистика RelayCore")));
 
 	const auto formatStats = [] {
@@ -665,9 +743,399 @@ void Zen::setupContent() {
 
 	Ui::AddSkip(content);
 	Ui::AddDivider(content);
-	Ui::AddDividerText(
+	Ui::AddSkip(content);
+
+	Ui::AddSubsectionTitle(content, rpl::single(QString::fromUtf8("Сброс параметров")));
+
+	const auto resetBtn = AddButtonWithIcon(
 		content,
-		rpl::single(QString::fromUtf8("ZenDesktop v1.0.0 (build 2601) • RelayCore 2.4")));
+		rpl::single(QString::fromUtf8("Сбросить все настройки ZenDesktop")),
+		st::settingsButton,
+		{ .icon = &st::menuIconRestore, .type = IconType::Simple });
+
+	resetBtn->setClickedCallback([=] {
+		ctrl->show(Ui::MakeConfirmBox({
+			.text = QString::fromUtf8("Сбросить все настройки ZenDesktop к значениям по умолчанию?"),
+			.confirmed = [=] {
+				Relay::RelayHooks::Instance().resetSettings();
+				ctrl->show(Ui::MakeInformBox(QString::fromUtf8("Настройки сброшены к значениям по умолчанию.")));
+			},
+		}));
+	});
+
+	Ui::ResizeFitChild(this, content);
+}
+
+// ==========================================
+// 10. Main Zen Section (ZenDesktop Main Hub)
+// ==========================================
+
+const char *kCardSvgs[] = {
+	// 0: Palette (Оформление)
+	R"(<svg xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path fill="#ffffff" d="M480-60.78q-85.86 0-162.3-33.2-76.44-33.19-133.48-90.24-57.05-57.04-90.24-133.49-33.2-76.45-33.2-162.32 0-86.93 33.63-163.32 33.63-76.39 91.68-133.22 58.04-56.82 135.39-89.74 77.35-32.91 165.16-32.91 83.62 0 158.3 28.91 74.67 28.92 131.28 79.96 56.61 51.05 89.8 120.77 33.2 69.72 33.2 150.45 0 118.39-70.85 188.37t-178.2 69.98h-60.99q-6.74 0-9.96 3.87-3.22 3.87-3.22 9.3 0 10.87 11.61 26.59t11.61 41.89q0 54.52-33.72 86.43-33.72 31.92-85.5 31.92ZM309.78-457q17-17 17-43t-17-43q-17-17-43-17t-43 17q-17 17-17 43t17 43q17 17 43 17t43-17Zm116.61-154.91q17-17 17-43t-17-43q-17-17-43-17t-43 17q-17 17-17 43t17 43q17 17 43 17t43-17Zm193.22 0q17-17 17-43t-17-43q-17-17-43-17t-43 17q-17 17-17 43t17 43q17 17 43 17t43-17ZM734.52-457q17-17 17-43t-17-43q-17-17-43-17t-43 17q-17 17-17 43t17 43q17 17 43 17t43-17Z"/></svg>)",
+	// 1: Messages (Сообщения)
+	R"(<svg xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path fill="#ffffff" d="m220.78-220.78-69.39 69.39q-25.22 25.22-57.91 11.61-32.7-13.61-32.7-49.09v-604.35q0-44.3 30.85-75.15 30.85-30.85 75.15-30.85h626.44q44.3 0 75.15 30.85 30.85 30.85 30.85 75.15v466.44q0 44.3-30.85 75.15-30.85 30.85-75.15 30.85H220.78ZM280-400h240q17 0 28.5-11.5T560-440q0-17-11.5-28.5T520-480H280q-17 0-28.5 11.5T240-440q0 17 11.5 28.5T280-400Zm0-120h400q17 0 28.5-11.5T720-560q0-17-11.5-28.5T680-600H280q-17 0-28.5 11.5T240-560q0 17 11.5 28.5T280-520Zm0-120h400q17 0 28.5-11.5T720-680q0-17-11.5-28.5T680-720H280q-17 0-28.5 11.5T240-680q0 17 11.5 28.5T280-640Z"/></svg>)",
+	// 2: Translate (Перевод)
+	R"(<svg xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path fill="#ffffff" d="m600.74-159.04-22.13 63.65q-5.13 15.52-18.81 25.06-13.67 9.55-30.19 9.55-26.78 0-42.96-21.87-16.17-21.87-6.48-48.09l144.09-398.04q6.7-17.22 21.5-27.61t33.02-10.39h41.87q18.22 0 33.02 10.39 14.81 10.39 21.51 27.61l144.08 397.91q9.7 25.78-6.26 47.94-15.96 22.15-43.3 22.15-16.96 0-30.7-9.55-13.74-9.54-19.87-26.06l-21.56-62.65H600.74Zm-252.31-213.7L188-212.74q-15.52 15.52-36.83 15.46-21.3-.07-37.26-16.02-15.52-15.53-15.52-37.33 0-21.8 15.52-37.33l161-161q-40.65-41.78-70.56-87.06-29.92-45.28-51.66-97.2h116.79q15.48 29.96 34.91 56.13 19.44 26.18 45.17 53.48 31.87-34.13 64.83-88.83 32.96-54.69 49.26-100.78H70.39q-22.09 0-37.54-15.45-15.46-15.46-15.46-37.55 0-22.08 15.46-37.54 15.45-15.46 37.54-15.46h227v-27q0-22.08 15.46-37.54 15.45-15.46 37.54-15.46t37.54 15.46q15.46 15.46 15.46 37.54v27h227q22.09 0 37.54 15.46 15.46 15.46 15.46 37.54 0 22.09-15.46 37.55-15.45 15.45-37.54 15.45H575.3q-22.13 69.18-64.97 144.61-42.85 75.44-87.24 121.09l68.87 70.3-39.61 110.83-103.92-106.35Zm285.22 117.7h130.44l-65.22-189.31-65.22 189.31Z"/>)",
+	// 3: Lock (Приватность)
+	R"(<svg xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path fill="#ffffff" d="M246.78-62.48q-43.72 0-74.86-31.14-31.14-31.13-31.14-74.86v-386.43q0-43.73 31.14-74.87 31.14-31.13 74.86-31.13h24.74v-63.61q0-87.52 60.76-148.85T480-934.7q86.96 0 147.72 61.33 60.76 61.33 60.76 148.85v63.61h24.74q43.72 0 74.86 31.13 31.14 31.14 31.14 74.87v386.43q0 43.73-31.14 74.86-31.14 31.14-74.86 31.14H246.78ZM536.5-305.2q23.5-23.5 23.5-56.5t-23.5-56.5Q513-441.7 480-441.7t-56.5 23.5Q400-394.7 400-361.7t23.5 56.5q23.5 23.5 56.5 23.5t56.5-23.5ZM377.52-660.91h204.96v-63.61q0-43.41-29.63-73.79Q523.22-828.7 480-828.7t-72.85 30.39q-29.63 30.38-29.63 73.79v63.61Z"/>)",
+	// 4: Wifi (Сеть)
+	R"(<svg xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path fill="#ffffff" d="M409-149q-29-29-29-71t29-71q29-29 71-29t71 29q29 29 29 71t-29 71q-29 29-71 29t-71-29Zm209.83-388.13q65.52 22.87 119.95 62.61 22.26 16.13 23.05 44.02.78 27.89-19.48 48.15-19.83 19.83-48.22 21.18-28.39 1.34-51.78-13.79-35.18-22.6-75.81-35.06T480-422.48q-45.35 0-85.7 12.18-40.34 12.17-75.52 34.78-23.95 15.13-52.63 13.85-28.67-1.29-48.5-21.11-19.82-20.26-19.26-47.87.57-27.61 22.83-43.74 54.43-39.74 119.95-62.68Q406.7-560 480-560q73.3 0 138.83 22.87Zm92.43-223q108.52 39.87 195.96 112.04 22.82 18.7 24.39 46.81 1.56 28.11-19.26 48.93-19.83 19.83-48.22 20.61-28.39.78-51.78-16.91-69.74-54.48-153.59-84.15-83.85-29.68-178.76-29.68T301.24-632.8q-83.85 29.67-153.59 84.15-23.39 17.69-51.5 16.91-28.11-.78-47.93-20.61-20.83-20.82-19.55-48.93 1.29-28.11 24.11-46.81 87.44-72.17 195.96-112.04Q357.26-800 480-800t231.26 39.87Z"/>)",
+	// 5: Puzzle (Плагины)
+	R"(<svg xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path fill="#ffffff" d="M193.78-100.78q-39.08 0-66.32-27.24-27.24-27.24-27.24-66.33v-121.61q0-15.52 10.54-26.84 10.54-11.33 26.07-15.03 36.73-9.69 61.47-36.78 24.74-27.09 24.74-64.26 0-37.3-24.45-63.89-24.46-26.59-61.2-36.72-14.96-4.13-25.78-15.74-10.83-11.61-10.83-26.56v-124.44q0-38.65 27.18-65.82 27.17-27.18 66.39-27.18h114.08q10.96-51 53.07-87.19 42.11-36.2 97.37-36.2 58.22 0 100.89 36.2 42.68 36.19 50.11 87.19h115.78q38.65 0 66.11 27.18 27.46 27.17 27.46 65.82v131.74q36 20.26 58.85 56.52 22.84 36.26 22.84 79.09 0 44.96-22.84 82.07-22.85 37.1-58.85 53.54v128.91q0 39.09-27.46 66.33-27.46 27.24-66.11 27.24H193.78Z"/>)",
+	// 6: Update/Clock (Обновления)
+	R"(<svg xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path fill="#ffffff" d="M480.57-100.78q-78.4 0-147.57-29.91-69.17-29.92-120.5-81.24-51.33-51.33-81.24-120.5-29.91-69.18-29.91-147.57 0-78.39 29.91-147.57 29.91-69.17 81.24-120.5 51.33-51.32 120.5-81.24 69.17-29.91 147.57-29.91 83.13 0 157.19 33.87 74.07 33.87 127.89 96.74v-41.56q0-18.7 12.92-31.33 12.91-12.63 31.6-12.63 18.7 0 31.33 12.63 12.63 12.63 12.63 31.33V-613q0 22.09-15.46 37.54Q823.22-560 801.13-560H643.96q-18.7 0-31.89-13.2-13.2-13.19-13.2-31.89 0-18.69 12.91-31.61 12.92-12.91 31.61-12.91h49.65q-39.3-49.22-94.78-76.41-55.48-27.2-117.69-27.2-114.18 0-193.7 79.52-79.52 79.53-79.52 193.7 0 114.17 79.52 193.7 79.52 79.52 193.7 79.52 89.91 0 160.67-52.2 70.76-52.19 97.59-135.41 6.69-19.96 24.5-30.5 17.8-10.54 38.89-7.41 22.08 3.13 35.48 19.3 13.39 16.17 7.69 35.7-32.95 121.26-133.91 198.89-100.96 77.63-230.91 77.63ZM524.52-496l94.91 94.35q12.7 12.69 12.7 31.39 0 18.69-12.7 31.39-12.69 12.7-31.39 12.7-18.69 0-31.39-12.7L451.43-444.09q-7.69-7.69-11.54-17.17-3.85-9.48-3.85-20.31v-154.47q0-18.7 12.92-31.33Q461.87-680 480.57-680q18.69 0 31.32 12.63 12.63 12.63 12.63 31.33V-496Z"/>)",
+	// 7: Heart (Поддержка)
+	R"(<svg xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path fill="#ffffff" d="M441.61-137.02q-18.74-6.98-33.7-21.37l-70.13-64.13Q232.91-317.83 146.85-415.3 60.78-512.78 60.78-634q0-102.48 68.09-171.13 68.09-68.65 170.56-68.65 51.87 0 98.31 19.95 46.43 19.96 81.69 56.7 35.27-36.74 81.7-56.7 46.44-19.95 98.3-19.95 102.48 0 171.42 68.65 68.93 68.65 68.93 171.13 0 121.22-86.41 219.2-86.41 97.97-193.28 193.84l-68.57 63.13q-14.95 14.4-33.98 21.09-19.02 6.7-38.11 6.7-19.08 0-37.82-6.98Z"/>)",
+	// 8: Star (Другое)
+	R"(<svg xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path fill="#ffffff" d="m354-287 126-76 126 77-33-144 111-96-146-13-58-136-58 135-146 13 111 97-33 143ZM233-120l65-281L80-590l288-25 112-265 112 265 288 25-218 189 65 281-247-149-247 149Z"/></svg>)",
+};
+
+struct CategoryCard {
+	QString title;
+	QString about;
+	Type (*target)();
+	QColor color;
+};
+
+class Zen final : public Section<Zen> {
+public:
+	Zen(
+		QWidget *parent,
+		not_null<Window::SessionController*> controller);
+
+	[[nodiscard]] rpl::producer<QString> title() override;
+
+private:
+	void setupContent();
+};
+
+Zen::Zen(
+	QWidget *parent,
+	not_null<Window::SessionController*> controller)
+: Section(parent, controller) {
+	setupContent();
+}
+
+rpl::producer<QString> Zen::title() {
+	return rpl::single(QString::fromUtf8("Настройки ZenDesktop"));
+}
+
+void Zen::setupContent() {
+	const auto content = Ui::CreateChild<Ui::VerticalLayout>(this);
+	const auto ctrl = controller();
+
+	// 1. Centered Header
+	const auto header = content->add(
+		object_ptr<Ui::VerticalLayout>(content),
+		QMargins(0, 10, 0, 10));
+
+	const auto logoSize = 72;
+	const auto logo = header->add(
+		object_ptr<Ui::FixedHeightWidget>(header, logoSize),
+		QMargins(0, 4, 0, 0));
+	logo->paintRequest() | rpl::on_next([=] {
+		auto p = QPainter(logo);
+		auto hq = PainterHighQualityEnabler(p);
+		const auto left = (logo->width() - logoSize) / 2;
+		p.setPen(Qt::NoPen);
+		// Electric Blue (#2b3cff)
+		p.setBrush(QColor(43, 60, 255));
+		p.drawEllipse(QRect(left, 0, logoSize, logoSize));
+
+		const auto &appLogo = Window::LogoNoMargin();
+		if (!appLogo.isNull()) {
+			const auto iconSize = 42;
+			p.drawImage(
+				QRect(left + (logoSize - iconSize) / 2, (logoSize - iconSize) / 2, iconSize, iconSize),
+				appLogo);
+		}
+	}, logo->lifetime());
+
+	const auto titleLabel = header->add(
+		object_ptr<Ui::FlatLabel>(
+			header,
+			rpl::single(QString::fromUtf8("ZenDesktop")),
+			st::defaultFlatLabel),
+		QMargins(0, 10, 0, 0),
+		style::al_top);
+	titleLabel->setFont(st::semiboldFont);
+
+	const auto versionLabel = header->add(
+		object_ptr<Ui::FlatLabel>(
+			header,
+			rpl::single(QString::fromUtf8("v1.0.0 (build 2601) • RelayCore 2.4")),
+			st::defaultFlatLabel),
+		QMargins(0, 2, 0, 6),
+		style::al_top);
+	versionLabel->setFont(st::normalFont);
+	versionLabel->setTextColorOverride(st::windowSubTextFg->c);
+
+	// 2. Search Box
+	auto search = CreateSectionSearchRow(content);
+	const auto searchRow = search.row;
+	content->add(
+		object_ptr<Ui::RpWidget>::fromRaw(searchRow.get()),
+		QMargins(14, 0, 14, 10));
+
+	// 3. 2-Column Category Grid + Bottom "Другое" Card
+	const auto cards = std::vector<CategoryCard>{
+		{ QString::fromUtf8("Оформление"), QString::fromUtf8("Иконка, список чатов, папки, нав..."), ZenAppearanceId, QColor(0x8E, 0x6C, 0xEF) },
+		{ QString::fromUtf8("Сообщения"), QString::fromUtf8("Вид, жесты, ввод, медиа"), ZenMessagesId, QColor(0x3A, 0x9B, 0xF0) },
+		{ QString::fromUtf8("Перевод"), QString::fromUtf8("Сервис, язык, весь чат"), ZenTranslateId, QColor(0x26, 0xB0, 0xA2) },
+		{ QString::fromUtf8("Приватность"), QString::fromUtf8("Телефон, ID, режим стримера"), ZenPrivacyId, QColor(0x5B, 0x6B, 0xE8) },
+		{ QString::fromUtf8("Сеть"), QString::fromUtf8("tg-ws-proxy, загрузки, скорость"), ZenNetworkId, QColor(0xF0, 0x8A, 0x3A) },
+		{ QString::fromUtf8("Плагины"), QString::fromUtf8("Плагины, движок, проверка"), ZenPluginsId, QColor(0xE2, 0x55, 0x7B) },
+		{ QString::fromUtf8("Обновления"), QString::fromUtf8("Автообновление, резервная копия"), ZenUpdatesId, QColor(0x3C, 0xB3, 0x71) },
+		{ QString::fromUtf8("Поддержка"), QString::fromUtf8("Бейдж, донат, ссылки"), ZenSupportId, QColor(0xF2, 0x54, 0x5B) },
+	};
+
+	const auto count = int(cards.size());
+	const auto rows = 4;
+	const auto cardHeight = 72;
+	const auto skip = 8;
+	const auto otherHeight = 52;
+	const auto totalHeight = rows * cardHeight + (rows - 1) * skip + 10 + otherHeight;
+
+	auto result = object_ptr<Ui::FixedHeightWidget>(content, totalHeight);
+	const auto grid = result.data();
+
+	struct State {
+		int over = -1;
+		int overWas = -1;
+		Ui::Animations::Simple overAnimation;
+		int pressed = -1;
+		std::vector<QImage> icons;
+		QString query;
+	};
+	const auto state = grid->lifetime().make_state<State>();
+
+	if (search.controller) {
+		search.controller->queryChanges(
+		) | rpl::on_next([=](const QString &q) {
+			state->query = q.trimmed();
+			grid->update();
+		}, grid->lifetime());
+	}
+
+	const auto cardRect = [=](int index) {
+		if (index == 8) {
+			return QRect(
+				0,
+				rows * (cardHeight + skip) + 8,
+				grid->width(),
+				otherHeight);
+		}
+		const auto width = (grid->width() - skip) / 2;
+		return QRect(
+			(index % 2) * (width + skip),
+			(index / 2) * (cardHeight + skip),
+			width,
+			cardHeight);
+	};
+
+	const auto cardAt = [=](QPoint point) {
+		for (auto i = 0; i <= 8; ++i) {
+			if (cardRect(i).contains(point)) {
+				return i;
+			}
+		}
+		return -1;
+	};
+
+	grid->paintRequest() | rpl::on_next([=] {
+		auto p = QPainter(grid);
+		auto hq = PainterHighQualityEnabler(p);
+
+		const auto mix = [](QColor a, QColor b, float64 k) {
+			return QColor(
+				int(a.red() + (b.red() - a.red()) * k),
+				int(a.green() + (b.green() - a.green()) * k),
+				int(a.blue() + (b.blue() - a.blue()) * k));
+		};
+		const auto md3Card = mix(st::windowBg->c, st::windowFg->c, 0.055);
+		const auto md3Tile = mix(md3Card, st::windowBgActive->c, 0.22);
+		const auto radius = 12.0;
+		const auto tileSize = 38;
+		const auto iconSize = 23;
+		const auto padding = 12;
+		const auto ratio = style::DevicePixelRatio();
+
+		if (state->icons.size() <= 8) {
+			state->icons.resize(9);
+			for (auto i = 0; i <= 8; ++i) {
+				auto img = QImage(
+					QSize(iconSize, iconSize) * ratio,
+					QImage::Format_ARGB32_Premultiplied);
+				img.fill(Qt::transparent);
+				img.setDevicePixelRatio(ratio);
+				{
+					auto q = QPainter(&img);
+					QSvgRenderer(QByteArray(kCardSvgs[i])).render(
+						&q,
+						QRectF(0, 0, iconSize, iconSize));
+					q.setCompositionMode(QPainter::CompositionMode_SourceIn);
+					q.fillRect(QRect(0, 0, iconSize, iconSize), QColor(255, 255, 255));
+				}
+				state->icons[i] = std::move(img);
+			}
+		}
+
+		const auto overProgress = state->overAnimation.value(1.);
+
+		// Paint 8 grid cards
+		for (auto i = 0; i < count; ++i) {
+			const auto rect = cardRect(i);
+			auto path = QPainterPath();
+			path.addRoundedRect(QRectF(rect), radius, radius);
+
+			p.setPen(Qt::NoPen);
+			p.fillPath(path, md3Card);
+
+			const auto overAlpha = (i == state->over)
+				? overProgress
+				: (i == state->overWas)
+				? (1. - overProgress)
+				: 0.;
+			if (overAlpha > 0.) {
+				auto over = st::windowFg->c;
+				over.setAlphaF(0.07 * overAlpha);
+				p.fillPath(path, over);
+			}
+
+			// Squircle Tile
+			const auto tileRect = QRect(
+				rect.x() + padding,
+				rect.y() + (rect.height() - tileSize) / 2,
+				tileSize,
+				tileSize);
+			p.setBrush(cards[i].color.isValid() ? cards[i].color : md3Tile);
+			p.drawRoundedRect(QRectF(tileRect), 10.0, 10.0);
+
+			// SVG Icon inside tile
+			if (!state->icons[i].isNull()) {
+				p.drawImage(
+					QRect(
+						tileRect.x() + (tileSize - iconSize) / 2,
+						tileRect.y() + (tileSize - iconSize) / 2,
+						iconSize,
+						iconSize),
+					state->icons[i]);
+			}
+
+			// Text
+			const auto textLeft = tileRect.x() + tileSize + 10;
+			const auto textWidth = rect.x() + rect.width() - padding - textLeft;
+
+			p.setPen(st::windowBoldFg);
+			p.setFont(st::semiboldFont);
+			p.drawText(
+				QRect(textLeft, rect.y() + 16, textWidth, st::semiboldFont->height),
+				Qt::AlignLeft | Qt::AlignTop,
+				st::semiboldFont->elided(cards[i].title, textWidth));
+
+			p.setPen(st::windowSubTextFg);
+			p.setFont(st::normalFont);
+			p.drawText(
+				QRect(textLeft, rect.y() + 16 + st::semiboldFont->height + 2, textWidth, st::normalFont->height * 2),
+				Qt::AlignLeft | Qt::AlignTop | Qt::TextWordWrap,
+				cards[i].about);
+		}
+
+		// Paint 9th Card: "Другое"
+		{
+			const auto otherIdx = 8;
+			const auto rect = cardRect(otherIdx);
+			auto path = QPainterPath();
+			path.addRoundedRect(QRectF(rect), radius, radius);
+
+			p.setPen(Qt::NoPen);
+			p.fillPath(path, md3Card);
+
+			const auto overAlpha = (otherIdx == state->over)
+				? overProgress
+				: (otherIdx == state->overWas)
+				? (1. - overProgress)
+				: 0.;
+			if (overAlpha > 0.) {
+				auto over = st::windowFg->c;
+				over.setAlphaF(0.07 * overAlpha);
+				p.fillPath(path, over);
+			}
+
+			// Star Icon
+			if (!state->icons[otherIdx].isNull()) {
+				p.drawImage(
+					QRect(
+						rect.x() + 16,
+						rect.y() + (rect.height() - iconSize) / 2,
+						iconSize,
+						iconSize),
+					state->icons[otherIdx]);
+			}
+
+			// Label
+			p.setPen(st::windowBoldFg);
+			p.setFont(st::semiboldFont);
+			p.drawText(
+				QRect(rect.x() + 16 + iconSize + 14, rect.y() + (rect.height() - st::semiboldFont->height) / 2, rect.width() - 60, st::semiboldFont->height),
+				Qt::AlignLeft | Qt::AlignVCenter,
+				QString::fromUtf8("Другое"));
+		}
+	}, grid->lifetime());
+
+	grid->setMouseTracking(true);
+	grid->events(
+	) | rpl::on_next([=](not_null<QEvent*> e) {
+		const auto type = e->type();
+		if (type == QEvent::MouseMove) {
+			const auto over = cardAt(static_cast<QMouseEvent*>(e.get())->pos());
+			if (state->over != over) {
+				state->overWas = state->over;
+				state->over = over;
+				state->overAnimation.stop();
+				state->overAnimation.start(
+					[=] { grid->update(); },
+					0.,
+					1.,
+					140,
+					anim::easeOutCubic);
+				grid->setCursor((over >= 0)
+					? style::cur_pointer
+					: style::cur_default);
+				grid->update();
+			}
+		} else if (type == QEvent::Leave) {
+			const auto over = -1;
+			if (state->over != over) {
+				state->overWas = state->over;
+				state->over = over;
+				state->overAnimation.stop();
+				state->overAnimation.start(
+					[=] { grid->update(); },
+					0.,
+					1.,
+					140,
+					anim::easeOutCubic);
+			}
+			grid->update();
+		} else if (type == QEvent::MouseButtonPress) {
+			state->pressed = cardAt(static_cast<QMouseEvent*>(e.get())->pos());
+		} else if (type == QEvent::MouseButtonRelease) {
+			const auto index = cardAt(static_cast<QMouseEvent*>(e.get())->pos());
+			const auto pressed = std::exchange(state->pressed, -1);
+			if (index >= 0 && index == pressed) {
+				if (index < count) {
+					const auto target = cards[index].target();
+					ctrl->showSettings(target);
+				} else if (index == 8) {
+					ctrl->showSettings(ZenOtherId());
+				}
+			}
+		}
+	}, grid->lifetime());
+
+	content->add(std::move(result), QMargins(14, 0, 14, 16));
 
 	Ui::ResizeFitChild(this, content);
 }
@@ -686,12 +1154,32 @@ Type ZenAppearanceId() {
 	return ZenAppearance::Id();
 }
 
+Type ZenMessagesId() {
+	return ZenMessages::Id();
+}
+
+Type ZenTranslateId() {
+	return ZenTranslate::Id();
+}
+
 Type ZenNetworkId() {
 	return ZenNetwork::Id();
 }
 
+Type ZenPluginsId() {
+	return ZenPlugins::Id();
+}
+
 Type ZenUpdatesId() {
 	return ZenUpdates::Id();
+}
+
+Type ZenSupportId() {
+	return ZenSupport::Id();
+}
+
+Type ZenOtherId() {
+	return ZenOther::Id();
 }
 
 } // namespace Settings

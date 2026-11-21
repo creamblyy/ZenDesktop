@@ -101,6 +101,24 @@ void RelayHooks::setHidePhoneNumberEnabled(bool enabled) {
 	saveSettings();
 }
 
+bool RelayHooks::isHideSensitiveMediaEnabled() const {
+	return _hideSensitiveMedia;
+}
+
+void RelayHooks::setHideSensitiveMediaEnabled(bool enabled) {
+	_hideSensitiveMedia = enabled;
+	saveSettings();
+}
+
+bool RelayHooks::isStreamerModeEnabled() const {
+	return _streamerMode;
+}
+
+void RelayHooks::setStreamerModeEnabled(bool enabled) {
+	_streamerMode = enabled;
+	saveSettings();
+}
+
 bool RelayHooks::isTimeWithSecondsEnabled() const {
 	return _timeWithSeconds;
 }
@@ -111,6 +129,41 @@ void RelayHooks::setTimeWithSecondsEnabled(bool enabled) {
 	LOG(("RelayHooks: Time with seconds set to %1").arg(enabled ? "true" : "false"));
 }
 
+bool RelayHooks::isShowSecondsEnabled() const {
+	return isTimeWithSecondsEnabled();
+}
+
+void RelayHooks::setShowSecondsEnabled(bool enabled) {
+	setTimeWithSecondsEnabled(enabled);
+}
+
+bool RelayHooks::isSwissMotionEnabled() const {
+	return _swissMotion;
+}
+
+void RelayHooks::setSwissMotionEnabled(bool enabled) {
+	_swissMotion = enabled;
+	saveSettings();
+}
+
+bool RelayHooks::isHideMuteIconEnabled() const {
+	return _hideMuteIcon;
+}
+
+void RelayHooks::setHideMuteIconEnabled(bool enabled) {
+	_hideMuteIcon = enabled;
+	saveSettings();
+}
+
+bool RelayHooks::isCustomBubbleColorEnabled() const {
+	return _customBubbleColor;
+}
+
+void RelayHooks::setCustomBubbleColorEnabled(bool enabled) {
+	_customBubbleColor = enabled;
+	saveSettings();
+}
+
 bool RelayHooks::isGreetingStickerDisabled() const {
 	return _greetingStickerDisabled;
 }
@@ -119,6 +172,14 @@ void RelayHooks::setGreetingStickerDisabled(bool disabled) {
 	_greetingStickerDisabled = disabled;
 	saveSettings();
 	LOG(("RelayHooks: Greeting sticker disabled set to %1").arg(disabled ? "true" : "false"));
+}
+
+bool RelayHooks::isCleanStickersEnabled() const {
+	return isGreetingStickerDisabled();
+}
+
+void RelayHooks::setCleanStickersEnabled(bool enabled) {
+	setGreetingStickerDisabled(enabled);
 }
 
 bool RelayHooks::isShowPeerIdEnabled() const {
@@ -218,7 +279,12 @@ void RelayHooks::loadSettings() {
 	_storiesStealth = s.value("stories_stealth", _ghostModeEnabled).toBool();
 	_noSponsored = s.value("no_sponsored", true).toBool();
 	_hidePhoneNumber = s.value("hide_phone_number", false).toBool();
+	_hideSensitiveMedia = s.value("hide_sensitive_media", false).toBool();
+	_streamerMode = s.value("streamer_mode", false).toBool();
 	_timeWithSeconds = s.value("time_with_seconds", false).toBool();
+	_swissMotion = s.value("swiss_motion", true).toBool();
+	_hideMuteIcon = s.value("hide_mute_icon", false).toBool();
+	_customBubbleColor = s.value("custom_bubble_color", false).toBool();
 	_greetingStickerDisabled = s.value("greeting_sticker_disabled", false).toBool();
 	_showPeerId = s.value("show_peer_id", true).toBool();
 	_material3Bubbles = s.value("material3_bubbles", true).toBool();
@@ -238,7 +304,12 @@ void RelayHooks::saveSettings() {
 	s.setValue("stories_stealth", _storiesStealth);
 	s.setValue("no_sponsored", _noSponsored);
 	s.setValue("hide_phone_number", _hidePhoneNumber);
+	s.setValue("hide_sensitive_media", _hideSensitiveMedia);
+	s.setValue("streamer_mode", _streamerMode);
 	s.setValue("time_with_seconds", _timeWithSeconds);
+	s.setValue("swiss_motion", _swissMotion);
+	s.setValue("hide_mute_icon", _hideMuteIcon);
+	s.setValue("custom_bubble_color", _customBubbleColor);
 	s.setValue("greeting_sticker_disabled", _greetingStickerDisabled);
 	s.setValue("show_peer_id", _showPeerId);
 	s.setValue("material3_bubbles", _material3Bubbles);

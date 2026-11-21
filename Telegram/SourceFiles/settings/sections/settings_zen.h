@@ -14,7 +14,12 @@ namespace Settings {
 [[nodiscard]] Type ZenId();
 [[nodiscard]] Type ZenPrivacyId();
 [[nodiscard]] Type ZenAppearanceId();
+[[nodiscard]] Type ZenMessagesId();
+[[nodiscard]] Type ZenTranslateId();
 [[nodiscard]] Type ZenNetworkId();
+[[nodiscard]] Type ZenPluginsId();
 [[nodiscard]] Type ZenUpdatesId();
+[[nodiscard]] Type ZenSupportId();
+[[nodiscard]] Type ZenOtherId();
 
 } // namespace Settings
