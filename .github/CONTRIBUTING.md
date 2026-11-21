@@ -1,123 +1,54 @@
-# Contributing
+# Участие в разработке ZenDesktop (Contributing)
 
-This document describes how you can contribute to Telegram Desktop. Please read it carefully.
+Мы приветствуем вклад в развитие **ZenDesktop** — открытого форка Telegram Desktop с фокусом на приватность, расширенный контроль и чистую эстетику интерфейса.
 
-**Table of Contents**
+---
 
-* [What contributions are accepted](#what-contributions-are-accepted)
-* [Build instructions](#build-instructions)
-* [Pull upstream changes into your fork regularly](#pull-upstream-changes-into-your-fork-regularly)
-* [How to get your pull request accepted](#how-to-get-your-pull-request-accepted)
-  * [Keep your pull requests limited to a single issue](#keep-your-pull-requests-limited-to-a-single-issue)
-    * [Squash your commits to a single commit](#squash-your-commits-to-a-single-commit)
-  * [Don't mix code changes with whitespace cleanup](#dont-mix-code-changes-with-whitespace-cleanup)
-  * [Keep your code simple!](#keep-your-code-simple)
-  * [Test your changes!](#test-your-changes)
-  * [Include a screenshot or video demonstration](#include-a-screenshot-or-video-demonstration)
-  * [Write a good commit message](#write-a-good-commit-message)
+## Основные правила
 
-## What contributions are accepted
+1. **Основная ветка разработки** — `dev`. Все пулл-реквесты должны создаваться в ветку `dev`, а не в `master`.
+2. **Чистота кода**: придерживайтесь стиля кодовой базы Telegram Desktop и C++20 (четкая типизация, отсутствие предупреждений компилятора MSVC, форматирование отступов в 4 пробела).
+3. **Атомарность**: один pull request — одно конкретное исправление или фича. Не смешивайте рефакторинг оформления с логическими изменениями.
+4. **Тестирование**: перед отправкой PR убедитесь, что код компилируется без ошибок локально или в GitHub Actions.
 
-We highly appreciate your contributions in the matter of fixing bugs and optimizing the Telegram Desktop source code and its documentation. In case of fixing the existing user experience please push to your fork and [submit a pull request][pr].
+---
 
-Wait for us. We try to review your pull requests as fast as possible.
-If we find issues with your pull request, we may suggest some changes and improvements.
+## Процесс создания Pull Request
 
-Unfortunately we **do not merge** any pull requests that have new feature implementations, translations to new languages and those which introduce any new user interface elements.
+1. Сделайте форк репозитория: `https://github.com/creamblyy/ZenDesktop`.
+2. Клонируйте свой форк и создайте ветку для новой функциональности:
+   ```bash
+   git checkout -b feature/your-feature-name origin/dev
+   ```
+3. Внесите изменения и зафиксируйте их с понятными commit message:
+   ```bash
+   git commit -m "feat(module): brief description of change"
+   ```
+4. Отправьте изменения в свой форк:
+   ```bash
+   git push origin feature/your-feature-name
+   ```
+5. Откройте Pull Request в ветку `dev` основного репозитория `creamblyy/ZenDesktop`.
 
-If you have a translations-related contribution, check out [Translations platform][translate].
+---
 
-Telegram Desktop is not a standalone application but a part of [Telegram project][telegram], so all the decisions about the features, languages, user experience, user interface and the design are made inside Telegram team, often according to some roadmap which is not public.
+## Архитектура модулей ZenDesktop
 
-## Build instructions
+- `Telegram/SourceFiles/relay_hooks/` — ядро перехвата и хуков (Anti-Recall, Ghost Mode, ZenUpdater, ZenBadges).
+- `Telegram/SourceFiles/settings/sections/settings_zen.cpp` — секция настроек ZenDesktop в интерфейсе.
+- `Telegram/SourceFiles/history/view/` — отрисовка сообщений и скругления бабблов (Material 3 Expressive).
 
-See the [README.md][build_instructions] for details on the various build
-environments.
+---
 
-## Pull upstream changes into your fork regularly
+## Сообщения об ошибках и предложения (Issues)
 
-Telegram Desktop is advancing quickly. It is therefore critical that you pull upstream changes into your fork on a regular basis. Nothing is worse than putting in a days of hard work into a pull request only to have it rejected because it has diverged too far from upstream.
+Если вы обнаружили баг или хотите предложить улучшение:
+1. Проверьте открытые и закрытые [Issues](https://github.com/creamblyy/ZenDesktop/issues), чтобы избежать дубликатов.
+2. Подробно опишите сценарий воспроизведения, окружение (версия Windows, билд клиента) и ожидаемое поведение.
+3. Приложите скриншот или лог, если это применимо.
 
-To pull in upstream changes:
+---
 
-    git remote add upstream https://github.com/telegramdesktop/tdesktop.git
-    git fetch upstream master
+## Мейнтейнер
 
-Check the log to be sure that you actually want the changes, before merging:
-
-    git log upstream/master
-
-Then rebase your changes on the latest commits in the `master` branch:
-
-    git rebase upstream/master
-
-After that, you have to force push your commits:
-
-    git push --force
-
-For more info, see [GitHub Help][help_fork_repo].
-
-## How to get your pull request accepted
-
-We want to improve Telegram Desktop with your contributions. But we also want to provide a stable experience for our users and the community. Follow these rules and you should succeed without a problem!
-
-### Keep your pull requests limited to a single issue
-
-Pull requests should be as small/atomic as possible. Large, wide-sweeping changes in a pull request will be **rejected**, with comments to isolate the specific code in your pull request. Some examples:
-
-* If you are making spelling corrections in the docs, don't modify other files.
-* If you are adding new functions don't '*cleanup*' unrelated functions. That cleanup belongs in another pull request.
-
-#### Squash your commits to a single commit
-
-To keep the history of the project clean, you should make one commit per pull request.
-If you already have multiple commits, you can add the commits together (squash them) with the following commands in Git Bash:
-
-1. Open `Git Bash` (or `Git Shell`)
-2. Enter following command to squash the recent {N} commits: `git reset --soft HEAD~{N} && git commit` (replace `{N}` with the number of commits you want to squash)
-3. Press <kbd>i</kbd> to get into Insert-mode
-4. Enter the commit message of the new commit
-5. After adding the message, press <kbd>ESC</kbd> to get out of the Insert-mode
-6. Write `:wq` and press <kbd>Enter</kbd> to save the new message or write `:q!` to discard your changes
-7. Enter `git push --force` to push the new commit to the remote repository
-
-For example, if you want to squash the last 5 commits, use `git reset --soft HEAD~5 && git commit`
-
-### Don't mix code changes with whitespace cleanup
-
-If you change two lines of code and correct 200 lines of whitespace issues in a file the diff on that pull request is functionally unreadable and will be **rejected**. Whitespace cleanups need to be in their own pull request.
-
-### Keep your code simple!
-
-Please keep your code as clean and straightforward as possible.
-Furthermore, the pixel shortage is over. We want to see:
-
-* `opacity` instead of `o`
-* `placeholder` instead of `ph`
-* `myFunctionThatDoesThings()` instead of `mftdt()`
-
-### Test your changes!
-
-Before you submit a pull request, please test your changes. Verify that Telegram Desktop still works and your changes don't cause other issue or crashes.
-
-### Include a screenshot or video demonstration
-
-If your pull request changes anything visible in the application (interface, behavior, rendering), include a screenshot or a video demonstration of the change in the pull request description. Pull requests without any screenshot or video demonstration are automatically marked with the `waiting for answer` label and a bot comment asking for the missing demonstration.
-
-### Write a good commit message
-
-* Explain why you make the changes. [More infos about a good commit message.][commit_message]
-
-* If you fix an issue with your commit, please close the issue by [adding one of the keywords and the issue number][closing-issues-via-commit-messages] to your commit message.
-
-  For example: `Fix #545`
-
-[//]: # (LINKS)
-[telegram]: https://telegram.org/
-[help_fork_repo]: https://help.github.com/articles/fork-a-repo/
-[help_change_commit_message]: https://help.github.com/articles/changing-a-commit-message/
-[commit_message]: http://tbaggery.com/2008/04/19/a-note-about-git-commit-messages.html
-[pr]: https://github.com/telegramdesktop/tdesktop/compare
-[build_instructions]: https://github.com/telegramdesktop/tdesktop/blob/master/README.md#build-instructions
-[closing-issues-via-commit-messages]: https://help.github.com/articles/closing-issues-via-commit-messages/
-[translate]: https://translations.telegram.org
+- [@creamblyy](https://github.com/creamblyy) — автор и ведущий разработчик проекта.
