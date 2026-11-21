@@ -35,6 +35,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "window/window_session_controller.h"
 #include "styles/style_chat.h"
 #include "styles/style_credits.h"
+#include "relay_hooks/relay_hooks.h"
 
 namespace HistoryView {
 namespace {
@@ -510,7 +511,9 @@ void BottomInfo::layoutDateText() {
 		: edited + ((_data.flags
 			& (Data::Flag::ForwardedDate | Data::Flag::FullDate))
 		? Ui::FormatDateTimeSavedFrom(_data.date)
-		: QLocale().toString(_data.date.time(), QLocale::ShortFormat));
+		: (Relay::RelayHooks::Instance().isTimeWithSecondsEnabled()
+			? _data.date.time().toString(u"hh:mm:ss"_q)
+			: QLocale().toString(_data.date.time(), QLocale::ShortFormat)));
 	const auto afterAuthor = prefix + date;
 	const auto afterAuthorWidth = st::msgDateFont->width(afterAuthor);
 	const auto authorWidth = st::msgDateFont->width(author);

@@ -26,3 +26,14 @@ constexpr auto AppVersion = 7004005;
 constexpr auto AppVersionStr = "7.4.5";
 constexpr auto AppBetaVersion = true;
 constexpr auto AppAlphaVersion = TDESKTOP_ALPHA_VERSION;
+
+// ZenDesktop Unique Version System
+constexpr auto ZenVersionMajor = 1;
+constexpr auto ZenVersionMinor = 0;
+constexpr auto ZenVersionPatch = 0;
+constexpr auto ZenBuildNumber = 2601;
+constexpr auto ZenVersionStr = "1.0.0"_cs;
+constexpr auto ZenBuildStr = "build 2601"_cs;
+constexpr auto ZenCoreVersionStr = "RelayCore 2.4"_cs;
+constexpr auto ZenFullVersionStr = "ZenDesktop v1.0.0 (build 2601) • RelayCore 2.4"_cs;
+

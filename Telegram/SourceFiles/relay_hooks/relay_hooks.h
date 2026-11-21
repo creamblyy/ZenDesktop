@@ -14,6 +14,12 @@ This file is part of Telegram Desktop fork with RelayHooks.
 
 namespace Relay {
 
+enum class AutoUpdateMode : int {
+	DownloadOnly = 0,
+	Disabled = 1,
+	AutoInstall = 2,
+};
+
 struct HookStats {
 	uint64_t deletedMessagesIntercepted = 0;
 	uint64_t typingBlocked = 0;
@@ -30,7 +36,7 @@ public:
 
 	static RelayHooks &Instance();
 
-	// Feature flags
+	// Privacy & Protection
 	[[nodiscard]] bool isGhostModeEnabled() const;
 	void setGhostModeEnabled(bool enabled);
 
@@ -42,6 +48,28 @@ public:
 
 	[[nodiscard]] bool isReadHistoryHidden() const;
 	void setReadHistoryHidden(bool hidden);
+
+	// Appearance
+	[[nodiscard]] bool isTimeWithSecondsEnabled() const;
+	void setTimeWithSecondsEnabled(bool enabled);
+
+	[[nodiscard]] bool isGreetingStickerDisabled() const;
+	void setGreetingStickerDisabled(bool disabled);
+
+	// Network
+	[[nodiscard]] bool isDownloadBoostEnabled() const;
+	void setDownloadBoostEnabled(bool enabled);
+
+	// Updates & Backup
+	[[nodiscard]] AutoUpdateMode autoUpdateMode() const;
+	void setAutoUpdateMode(AutoUpdateMode mode);
+	[[nodiscard]] QString autoUpdateModeString() const;
+
+	void saveSettings();
+	void loadSettings();
+	[[nodiscard]] bool exportSettings(const QString &filePath) const;
+	bool importSettings(const QString &filePath);
+	void resetSettings();
 
 	// Core Hook Interceptors
 	// Returns false if deletion should be intercepted/cancelled
@@ -79,6 +107,10 @@ private:
 	bool _antiRecallEnabled = true; // Anti-recall on by default
 	bool _hideTyping = false;
 	bool _hideReadHistory = false;
+	bool _timeWithSeconds = false;
+	bool _greetingStickerDisabled = false;
+	bool _downloadBoost = true; // Enabled by default
+	AutoUpdateMode _autoUpdateMode = AutoUpdateMode::DownloadOnly;
 
 	HookStats _stats;
 

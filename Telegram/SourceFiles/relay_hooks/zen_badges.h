@@ -10,6 +10,10 @@ This file is part of Telegram Desktop fork - ZenDesktop with RelayHooks.
 #include <cstdint>
 #include <optional>
 
+namespace Window {
+class SessionController;
+} // namespace Window
+
 namespace Relay {
 
 enum class ZenBadgeType : uint8_t {
@@ -39,6 +43,7 @@ public:
 	bool loadFromJson(const QString &json);
 	bool loadFromFile(const QString &filePath);
 	[[nodiscard]] QString exportToJson() const;
+	void syncFromRemote(Window::SessionController *controller = nullptr);
 
 	// Drawing helper in chat lists and headers
 	int drawBadge(QPainter &p, const QRect &rectForName, int nameWidth, int outerWidth, uint64_t peerId);

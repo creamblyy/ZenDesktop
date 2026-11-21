@@ -7,6 +7,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "window/window_session_controller.h"
 
+#include "relay_hooks/zen_updater.h"
 #include "apiwrap.h"
 #include "api/api_cloud_password.h"
 #include "api/api_text_entities.h"
@@ -1776,6 +1777,7 @@ SessionController::SessionController(
 			Theme::CheckChatThemeWallPaper(this);
 		});
 		Media::Stories::SetupStoryPostToasts(this);
+		Relay::ZenUpdater::Instance().init(this);
 	}
 	style::PaletteChanged(
 	) | rpl::on_next([=] {

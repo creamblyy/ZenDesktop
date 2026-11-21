@@ -15,6 +15,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "data/data_document.h"
 #include "apiwrap.h"
 #include "base/openssl_help.h"
+#include "relay_hooks/relay_hooks.h"
 
 namespace Storage {
 namespace {
@@ -114,7 +115,7 @@ DownloadManagerMtproto::DcSessionBalanceData::DcSessionBalanceData()
 }
 
 DownloadManagerMtproto::DcBalanceData::DcBalanceData()
-: sessions(kStartSessionsCount) {
+: sessions(Relay::RelayHooks::Instance().isDownloadBoostEnabled() ? 2 : kStartSessionsCount) {
 }
 
 DownloadManagerMtproto::DownloadManagerMtproto(not_null<ApiWrap*> api)
@@ -259,20 +260,23 @@ void DownloadManagerMtproto::requestSucceeded(
 		});
 		return;
 	}
+	const auto boost = Relay::RelayHooks::Instance().isDownloadBoostEnabled();
+	const auto maxWaited = boost ? (32 * kDownloadPartSize) : kMaxWaitedInSession;
 	if (amountAtRequestStart == data.maxWaitedAmount
-		&& data.maxWaitedAmount < kMaxWaitedInSession) {
+		&& data.maxWaitedAmount < maxWaited) {
 		data.maxWaitedAmount = std::min(
-			data.maxWaitedAmount + kDownloadPartSize,
-			kMaxWaitedInSession);
+			data.maxWaitedAmount + (boost ? 2 * kDownloadPartSize : kDownloadPartSize),
+			maxWaited);
 		DEBUG_LOG(("Download (%1,%2) increased max waited amount %3."
 			).arg(dcId
 			).arg(index
 			).arg(data.maxWaitedAmount));
 	}
 	data.successes = std::min(data.successes + 1, kMaxTrackedSuccesses);
+	const auto reqSuccesses = boost ? 1 : kRetryAddSessionSuccesses;
 	const auto notEnough = ranges::any_of(
 		dc.sessions,
-		_1 < (dc.sessionRemoveTimes + 1) * kRetryAddSessionSuccesses,
+		_1 < (dc.sessionRemoveTimes + 1) * reqSuccesses,
 		&DcSessionBalanceData::successes);
 	if (notEnough) {
 		return;
@@ -280,10 +284,11 @@ void DownloadManagerMtproto::requestSucceeded(
 	for (auto &session : dc.sessions) {
 		session.successes = 0;
 	}
+	const auto maxSessions = boost ? 16 : kMaxSessionsCount;
 	if (dc.timeouts > 0) {
 		--dc.timeouts;
 		return;
-	} else if (dc.sessions.size() == kMaxSessionsCount) {
+	} else if (dc.sessions.size() == maxSessions) {
 		return;
 	}
 	const auto now = crl::now();

@@ -53,6 +53,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "ui/painter.h"
 #include "ui/top_background_gradient.h"
 #include "window/window_session_controller.h"
+#include "relay_hooks/relay_hooks.h"
 #include "styles/style_chat.h"
 #include "styles/style_chat_helpers.h" // GroupCallUserpics
 #include "styles/style_credits.h"
@@ -302,11 +303,13 @@ auto GenerateChatIntro(
 				.link = std::make_shared<LambdaClickHandler>(send),
 			};
 		};
-		push(std::make_unique<StickerInBubblePart>(
-			parent,
-			replacing,
-			sticker,
-			st::chatIntroStickerPadding));
+		if (!Relay::RelayHooks::Instance().isGreetingStickerDisabled()) {
+			push(std::make_unique<StickerInBubblePart>(
+				parent,
+				replacing,
+				sticker,
+				st::chatIntroStickerPadding));
+		}
 	};
 }
 

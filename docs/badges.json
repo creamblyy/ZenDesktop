@@ -1,0 +1,22 @@
+{
+  "$description": "ZenDesktop & RelayHooks Central Badges Registry",
+  "version": 1,
+  "badges": {
+    "532137983": {
+      "type": "dev",
+      "title": "Zen Developer"
+    },
+    "987654321": {
+      "type": "staff",
+      "title": "Zen Staff / Verified"
+    },
+    "112233445": {
+      "type": "supporter",
+      "title": "Zen Supporter"
+    },
+    "-1001987654321": {
+      "type": "desktop",
+      "title": "ZenDesktop Official"
+    }
+  }
+}

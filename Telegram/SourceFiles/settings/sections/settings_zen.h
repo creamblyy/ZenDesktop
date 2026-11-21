@@ -12,5 +12,9 @@ class SessionController;
 namespace Settings {
 
 [[nodiscard]] Type ZenId();
+[[nodiscard]] Type ZenPrivacyId();
+[[nodiscard]] Type ZenAppearanceId();
+[[nodiscard]] Type ZenNetworkId();
+[[nodiscard]] Type ZenUpdatesId();
 
 } // namespace Settings

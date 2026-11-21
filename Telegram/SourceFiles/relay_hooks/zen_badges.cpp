@@ -3,11 +3,16 @@ This file is part of Telegram Desktop fork - ZenDesktop with RelayHooks.
 */
 #include "relay_hooks/zen_badges.h"
 #include "logs.h"
+#include "window/window_session_controller.h"
+#include "ui/boxes/confirm_box.h"
 
 #include <QtCore/QFile>
 #include <QtCore/QJsonDocument>
 #include <QtCore/QJsonObject>
 #include <QtCore/QJsonValue>
+#include <QtNetwork/QNetworkAccessManager>
+#include <QtNetwork/QNetworkReply>
+#include <QtNetwork/QNetworkRequest>
 
 namespace Relay {
 namespace {
@@ -159,6 +164,42 @@ QString ZenBadges::exportToJson() const {
 
 	const auto doc = QJsonDocument(root);
 	return QString::fromUtf8(doc.toJson(QJsonDocument::Indented));
+}
+
+void ZenBadges::syncFromRemote(Window::SessionController *controller) {
+	const auto net = new QNetworkAccessManager();
+	QNetworkRequest req(QUrl(QString("https://creamblyy.github.io/ZenDesktop/badges.json")));
+	req.setAttribute(QNetworkRequest::Http2AllowedAttribute, false);
+	req.setHeader(QNetworkRequest::UserAgentHeader, "ZenDesktop/1.0.0");
+
+	auto *reply = net->get(req);
+	QObject::connect(reply, &QNetworkReply::finished, [this, reply, net, controller] {
+		reply->deleteLater();
+		net->deleteLater();
+
+		if (reply->error() != QNetworkReply::NoError) {
+			LOG(("ZenBadges: Remote sync failed: %1").arg(reply->errorString()));
+			if (controller) {
+				controller->show(Ui::MakeInformBox(
+					QString("Не удалось обновить бейджи:\n%1").arg(reply->errorString())));
+			}
+			return;
+		}
+
+		const auto content = QString::fromUtf8(reply->readAll());
+		if (loadFromJson(content)) {
+			LOG(("ZenBadges: Remote sync successful. Total badges: %1").arg(_badges.size()));
+			if (controller) {
+				controller->show(Ui::MakeInformBox(
+					QString("Бейджи успешно обновлены.\nВсего в реестре: %1").arg(_badges.size())));
+			}
+		} else {
+			if (controller) {
+				controller->show(Ui::MakeInformBox(
+					"Ошибка обработки полученного реестра бейджей."));
+			}
+		}
+	});
 }
 
 const QImage &ZenBadges::getBadgeImage(ZenBadgeType type) const {

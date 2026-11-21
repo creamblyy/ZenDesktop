@@ -143,6 +143,8 @@ PRIVATE
     relay_hooks/relay_hooks.h
     relay_hooks/zen_badges.cpp
     relay_hooks/zen_badges.h
+    relay_hooks/zen_updater.cpp
+    relay_hooks/zen_updater.h
 
     api/api_attached_stickers.cpp
     api/api_attached_stickers.h

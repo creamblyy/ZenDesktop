@@ -6,18 +6,438 @@ This file is part of Telegram Desktop fork - ZenDesktop with RelayHooks.
 #include "settings/settings_common_session.h"
 #include "settings/settings_common.h"
 #include "relay_hooks/relay_hooks.h"
+#include "relay_hooks/zen_updater.h"
+#include "relay_hooks/zen_badges.h"
+#include "core/version.h"
+#include "core/file_utilities.h"
 #include "ui/vertical_list.h"
 #include "ui/wrap/vertical_layout.h"
 #include "ui/widgets/checkbox.h"
 #include "ui/widgets/labels.h"
 #include "ui/widgets/buttons.h"
+#include "ui/widgets/fields/input_field.h"
+#include "ui/boxes/confirm_box.h"
 #include "ui/ui_utility.h"
 #include "window/window_session_controller.h"
 #include "styles/style_settings.h"
+#include "styles/style_menu_icons.h"
 
 namespace Settings {
 namespace {
 
+// ==========================================
+// 1. Privacy & Stealth Section (Приватность)
+// ==========================================
+class ZenPrivacy final : public Section<ZenPrivacy> {
+public:
+	ZenPrivacy(
+		QWidget *parent,
+		not_null<Window::SessionController*> controller);
+
+	[[nodiscard]] rpl::producer<QString> title() override;
+
+private:
+	void setupContent();
+};
+
+ZenPrivacy::ZenPrivacy(
+	QWidget *parent,
+	not_null<Window::SessionController*> controller)
+: Section(parent, controller) {
+	setupContent();
+}
+
+rpl::producer<QString> ZenPrivacy::title() {
+	return rpl::single(QString::fromUtf8("Приватность"));
+}
+
+void ZenPrivacy::setupContent() {
+	const auto content = Ui::CreateChild<Ui::VerticalLayout>(this);
+	auto &lifetime = content->lifetime();
+	auto &hooks = Relay::RelayHooks::Instance();
+
+	const auto addCheckbox = [&](rpl::producer<QString> &&label, bool checked) {
+		return content->add(
+			object_ptr<Ui::Checkbox>(
+				content,
+				std::move(label),
+				checked,
+				st::settingsCheckbox),
+			st::settingsCheckboxPadding);
+	};
+
+	Ui::AddSkip(content);
+	Ui::AddSubsectionTitle(content, rpl::single(QString::fromUtf8("Стелс-режим (Ghost Mode)")));
+
+	const auto ghostToggle = addCheckbox(
+		rpl::single(QString::fromUtf8("Ghost Mode (Невидимка)")),
+		hooks.isGhostModeEnabled());
+
+	Ui::AddDividerText(
+		content,
+		rpl::single(QString::fromUtf8("Скрывает факт прочтения входящих сообщений и предотвращает отправку статуса набора текста собеседникам.")));
+
+	const auto typingToggle = addCheckbox(
+		rpl::single(QString::fromUtf8("Скрывать статус набора текста")),
+		hooks.isTypingHidden());
+
+	const auto readToggle = addCheckbox(
+		rpl::single(QString::fromUtf8("Скрывать отчет о прочтении")),
+		hooks.isReadHistoryHidden());
+
+	ghostToggle->checkedChanges(
+	) | rpl::on_next([=](bool checked) {
+		Relay::RelayHooks::Instance().setGhostModeEnabled(checked);
+		typingToggle->setChecked(Relay::RelayHooks::Instance().isTypingHidden());
+		readToggle->setChecked(Relay::RelayHooks::Instance().isReadHistoryHidden());
+	}, lifetime);
+
+	typingToggle->checkedChanges(
+	) | rpl::on_next([=](bool checked) {
+		Relay::RelayHooks::Instance().setTypingHidden(checked);
+	}, lifetime);
+
+	readToggle->checkedChanges(
+	) | rpl::on_next([=](bool checked) {
+		Relay::RelayHooks::Instance().setReadHistoryHidden(checked);
+	}, lifetime);
+
+	Ui::AddSkip(content);
+	Ui::AddDivider(content);
+	Ui::AddSkip(content);
+
+	Ui::AddSubsectionTitle(content, rpl::single(QString::fromUtf8("Защита сообщений")));
+
+	const auto antiRecallToggle = addCheckbox(
+		rpl::single(QString::fromUtf8("Anti-Recall (Сохранение удаленных)")),
+		hooks.isAntiRecallEnabled());
+
+	Ui::AddDividerText(
+		content,
+		rpl::single(QString::fromUtf8("Сохраняет входящие сообщения локально на устройстве, даже если отправитель удалил их у всех.")));
+
+	antiRecallToggle->checkedChanges(
+	) | rpl::on_next([=](bool checked) {
+		Relay::RelayHooks::Instance().setAntiRecallEnabled(checked);
+	}, lifetime);
+
+	Ui::ResizeFitChild(this, content);
+}
+
+// ==========================================
+// 2. Appearance Section (Внешний вид)
+// ==========================================
+class ZenAppearance final : public Section<ZenAppearance> {
+public:
+	ZenAppearance(
+		QWidget *parent,
+		not_null<Window::SessionController*> controller);
+
+	[[nodiscard]] rpl::producer<QString> title() override;
+
+private:
+	void setupContent();
+};
+
+ZenAppearance::ZenAppearance(
+	QWidget *parent,
+	not_null<Window::SessionController*> controller)
+: Section(parent, controller) {
+	setupContent();
+}
+
+rpl::producer<QString> ZenAppearance::title() {
+	return rpl::single(QString::fromUtf8("Внешний вид"));
+}
+
+void ZenAppearance::setupContent() {
+	const auto content = Ui::CreateChild<Ui::VerticalLayout>(this);
+	auto &lifetime = content->lifetime();
+	auto &hooks = Relay::RelayHooks::Instance();
+
+	const auto addCheckbox = [&](rpl::producer<QString> &&label, bool checked) {
+		return content->add(
+			object_ptr<Ui::Checkbox>(
+				content,
+				std::move(label),
+				checked,
+				st::settingsCheckbox),
+			st::settingsCheckboxPadding);
+	};
+
+	Ui::AddSkip(content);
+	Ui::AddSubsectionTitle(content, rpl::single(QString::fromUtf8("Отображение сообщений")));
+
+	const auto secondsToggle = addCheckbox(
+		rpl::single(QString::fromUtf8("Время с секундами (HH:MM:SS)")),
+		hooks.isTimeWithSecondsEnabled());
+
+	Ui::AddDividerText(
+		content,
+		rpl::single(QString::fromUtf8("Отображает точное время отправки и редактирования сообщений с секундами в уголках баблов сообщений.")));
+
+	secondsToggle->checkedChanges(
+	) | rpl::on_next([=](bool checked) {
+		Relay::RelayHooks::Instance().setTimeWithSecondsEnabled(checked);
+	}, lifetime);
+
+	Ui::AddSkip(content);
+	Ui::AddDivider(content);
+	Ui::AddSkip(content);
+
+	Ui::AddSubsectionTitle(content, rpl::single(QString::fromUtf8("Стикеры и подсказки")));
+
+	const auto greetingToggle = addCheckbox(
+		rpl::single(QString::fromUtf8("Отключить приветственные стикеры")),
+		hooks.isGreetingStickerDisabled());
+
+	Ui::AddDividerText(
+		content,
+		rpl::single(QString::fromUtf8("Скрывает большой анимированный приветственный стикер в пустых диалогах.")));
+
+	greetingToggle->checkedChanges(
+	) | rpl::on_next([=](bool checked) {
+		Relay::RelayHooks::Instance().setGreetingStickerDisabled(checked);
+	}, lifetime);
+
+	Ui::ResizeFitChild(this, content);
+}
+
+// ==========================================
+// 3. Network Section (Сеть)
+// ==========================================
+class ZenNetwork final : public Section<ZenNetwork> {
+public:
+	ZenNetwork(
+		QWidget *parent,
+		not_null<Window::SessionController*> controller);
+
+	[[nodiscard]] rpl::producer<QString> title() override;
+
+private:
+	void setupContent();
+};
+
+ZenNetwork::ZenNetwork(
+	QWidget *parent,
+	not_null<Window::SessionController*> controller)
+: Section(parent, controller) {
+	setupContent();
+}
+
+rpl::producer<QString> ZenNetwork::title() {
+	return rpl::single(QString::fromUtf8("Сеть"));
+}
+
+void ZenNetwork::setupContent() {
+	const auto content = Ui::CreateChild<Ui::VerticalLayout>(this);
+	auto &lifetime = content->lifetime();
+	auto &hooks = Relay::RelayHooks::Instance();
+
+	const auto addCheckbox = [&](rpl::producer<QString> &&label, bool checked) {
+		return content->add(
+			object_ptr<Ui::Checkbox>(
+				content,
+				std::move(label),
+				checked,
+				st::settingsCheckbox),
+			st::settingsCheckboxPadding);
+	};
+
+	Ui::AddSkip(content);
+	Ui::AddSubsectionTitle(content, rpl::single(QString::fromUtf8("Скорость и загрузка")));
+
+	const auto boostToggle = addCheckbox(
+		rpl::single(QString::fromUtf8("Ускоренная многопоточная загрузка (Download Boost)")),
+		hooks.isDownloadBoostEnabled());
+
+	Ui::AddDividerText(
+		content,
+		rpl::single(QString::fromUtf8("Многопоточная параллельная загрузка файлов и медиа до 16 MTProto сессий одновременно, снимающая ограничение одиночного коннекта.")));
+
+	boostToggle->checkedChanges(
+	) | rpl::on_next([=](bool checked) {
+		Relay::RelayHooks::Instance().setDownloadBoostEnabled(checked);
+	}, lifetime);
+
+	Ui::ResizeFitChild(this, content);
+}
+
+// ==========================================
+// 4. Updates & Backup Section (Обновления)
+// ==========================================
+class ZenUpdates final : public Section<ZenUpdates> {
+public:
+	ZenUpdates(
+		QWidget *parent,
+		not_null<Window::SessionController*> controller);
+
+	[[nodiscard]] rpl::producer<QString> title() override;
+	[[nodiscard]] base::weak_qptr<Ui::RpWidget> createPinnedToTop(
+		not_null<QWidget*> parent) override;
+
+private:
+	void setupContent();
+};
+
+ZenUpdates::ZenUpdates(
+	QWidget *parent,
+	not_null<Window::SessionController*> controller)
+: Section(parent, controller) {
+	setupContent();
+}
+
+rpl::producer<QString> ZenUpdates::title() {
+	return rpl::single(QString::fromUtf8("Обновления"));
+}
+
+base::weak_qptr<Ui::RpWidget> ZenUpdates::createPinnedToTop(
+		not_null<QWidget*> parent) {
+	auto search = CreateSectionSearchRow(parent);
+	const auto row = search.row;
+	return base::make_weak(row);
+}
+
+void ZenUpdates::setupContent() {
+	const auto content = Ui::CreateChild<Ui::VerticalLayout>(this);
+	const auto ctrl = controller();
+
+	Ui::AddSkip(content);
+	Ui::AddSubsectionTitle(content, rpl::single(QString::fromUtf8("Обновления")));
+
+	// 1. Проверить обновления
+	const auto checkUpdateBtn = AddButtonWithIcon(
+		content,
+		rpl::single(QString::fromUtf8("Проверить обновления")),
+		st::settingsButton,
+		{ .icon = &st::menuIconRestore, .type = IconType::Simple });
+
+	checkUpdateBtn->setClickedCallback([=] {
+		Relay::ZenUpdater::Instance().setController(ctrl);
+		Relay::ZenUpdater::Instance().checkForUpdates(true);
+	});
+
+	// 2. Обновить бейджи
+	const auto updateBadgesBtn = AddButtonWithIcon(
+		content,
+		rpl::single(QString::fromUtf8("Обновить бейджи")),
+		st::settingsButton,
+		{ .icon = &st::menuIconRestore, .type = IconType::Simple });
+
+	updateBadgesBtn->setClickedCallback([=] {
+		Relay::ZenBadges::Instance().syncFromRemote(ctrl);
+	});
+
+	// 3. Список изменений
+	const auto changelogBtn = AddButtonWithIcon(
+		content,
+		rpl::single(QString::fromUtf8("Список изменений")),
+		st::settingsButton,
+		{ .icon = &st::menuIconInfo, .type = IconType::Simple });
+
+	changelogBtn->setClickedCallback([=] {
+		Relay::ZenUpdater::Instance().showChangelog(ctrl);
+	});
+
+	// 4. Автообновление (cycle mode on click)
+	auto modeStr = rpl::single(Relay::RelayHooks::Instance().autoUpdateModeString());
+	const auto autoUpdateBtn = AddButtonWithLabel(
+		content,
+		rpl::single(QString::fromUtf8("Автообновление")),
+		rpl::duplicate(modeStr),
+		st::settingsButton);
+
+	autoUpdateBtn->setClickedCallback([=] {
+		auto &hooks = Relay::RelayHooks::Instance();
+		const auto current = hooks.autoUpdateMode();
+		const auto next = (current == Relay::AutoUpdateMode::DownloadOnly)
+			? Relay::AutoUpdateMode::AutoInstall
+			: (current == Relay::AutoUpdateMode::AutoInstall)
+			? Relay::AutoUpdateMode::Disabled
+			: Relay::AutoUpdateMode::DownloadOnly;
+		hooks.setAutoUpdateMode(next);
+		ctrl->show(Ui::MakeInformBox(QString("Режим автообновления: %1").arg(hooks.autoUpdateModeString())));
+	});
+
+	Ui::AddSkip(content);
+	Ui::AddDivider(content);
+	Ui::AddSkip(content);
+
+	// Section 2: Резервная копия
+	Ui::AddSubsectionTitle(content, rpl::single(QString::fromUtf8("Резервная копия")));
+
+	// Экспорт настроек
+	const auto exportBtn = AddButtonWithIcon(
+		content,
+		rpl::single(QString::fromUtf8("Экспорт настроек")),
+		st::settingsButton,
+		{ .icon = &st::menuIconSettings, .type = IconType::Simple });
+
+	exportBtn->setClickedCallback([=] {
+		const auto initial = QString("ZenDesktop_config.json");
+		FileDialog::GetWritePath(
+			this,
+			QString::fromUtf8("Экспорт настроек ZenDesktop"),
+			QString("JSON (*.json);;All files (*.*)"),
+			initial,
+			[=](QString &&path) {
+				if (!path.isEmpty()) {
+					if (Relay::RelayHooks::Instance().exportSettings(path)) {
+						ctrl->show(Ui::MakeInformBox(QString::fromUtf8("Настройки успешно экспортированы.")));
+					} else {
+						ctrl->show(Ui::MakeInformBox(QString::fromUtf8("Не удалось сохранить файл настроек.")));
+					}
+				}
+			});
+	});
+
+	// Импорт настроек
+	const auto importBtn = AddButtonWithIcon(
+		content,
+		rpl::single(QString::fromUtf8("Импорт настроек")),
+		st::settingsButton,
+		{ .icon = &st::menuIconDownload, .type = IconType::Simple });
+
+	importBtn->setClickedCallback([=] {
+		FileDialog::GetOpenPath(
+			this,
+			QString::fromUtf8("Импорт настроек ZenDesktop"),
+			QString("JSON (*.json);;All files (*.*)"),
+			[=](FileDialog::OpenResult &&result) {
+				if (!result.paths.isEmpty()) {
+					const auto path = result.paths.first();
+					if (Relay::RelayHooks::Instance().importSettings(path)) {
+						ctrl->show(Ui::MakeInformBox(QString::fromUtf8("Настройки успешно импортированы.")));
+					} else {
+						ctrl->show(Ui::MakeInformBox(QString::fromUtf8("Ошибка при чтении файла настроек.")));
+					}
+				}
+			});
+	});
+
+	// Сброс настроек
+	const auto resetBtn = AddButtonWithIcon(
+		content,
+		rpl::single(QString::fromUtf8("Сброс настроек")),
+		st::settingsButton,
+		{ .icon = &st::menuIconRestore, .type = IconType::Simple });
+
+	resetBtn->setClickedCallback([=] {
+		ctrl->show(Ui::MakeConfirmBox({
+			.text = QString::fromUtf8("Сбросить все настройки ZenDesktop к значениям по умолчанию?"),
+			.confirmed = [=] {
+				Relay::RelayHooks::Instance().resetSettings();
+				ctrl->show(Ui::MakeInformBox(QString::fromUtf8("Настройки сброшены к значениям по умолчанию.")));
+			},
+		}));
+	});
+
+	Ui::ResizeFitChild(this, content);
+}
+
+// ==========================================
+// 5. Main Zen Section (ZenDesktop Main Hub)
+// ==========================================
 class Zen final : public Section<Zen> {
 public:
 	Zen(
@@ -38,83 +458,70 @@ Zen::Zen(
 }
 
 rpl::producer<QString> Zen::title() {
-	return rpl::single(u"ZenDesktop"_q);
+	return rpl::single(QString::fromUtf8("ZenDesktop"));
 }
 
 void Zen::setupContent() {
 	const auto content = Ui::CreateChild<Ui::VerticalLayout>(this);
-	auto &lifetime = content->lifetime();
+	const auto ctrl = controller();
 
 	Ui::AddSkip(content);
-	Ui::AddSubsectionTitle(content, rpl::single(u"RelayHooks & Стелс"_q));
+	Ui::AddSubsectionTitle(content, rpl::single(QString::fromUtf8("Разделы настроек")));
 
-	auto &hooks = Relay::RelayHooks::Instance();
-
-	const auto addCheckbox = [&](rpl::producer<QString> &&label, bool checked) {
-		return content->add(
-			object_ptr<Ui::Checkbox>(
-				content,
-				std::move(label),
-				checked,
-				st::settingsCheckbox),
-			st::settingsCheckboxPadding);
-	};
-
-	// Ghost mode toggle
-	const auto ghostToggle = addCheckbox(
-		rpl::single(u"Ghost Mode (Стелс-режим)"_q),
-		hooks.isGhostModeEnabled());
-
-	Ui::AddDividerText(
+	// 1. Приватность
+	const auto privacyBtn = AddButtonWithLabel(
 		content,
-		rpl::single(u"Скрывает факт прочтения входящих сообщений и предотвращает отправку статуса набора текста."_q));
+		rpl::single(QString::fromUtf8("Приватность")),
+		rpl::single(QString::fromUtf8("Ghost Mode, Anti-Recall")),
+		st::settingsButton,
+		{ .icon = &st::menuIconStealth, .type = IconType::Simple });
 
-	// Anti-recall toggle
-	const auto antiRecallToggle = addCheckbox(
-		rpl::single(u"Anti-Recall (Сохранение удаленных сообщений)"_q),
-		hooks.isAntiRecallEnabled());
+	privacyBtn->setClickedCallback([=] {
+		ctrl->showSettings(ZenPrivacyId());
+	});
 
-	Ui::AddDividerText(
+	// 2. Внешний вид
+	const auto appearanceBtn = AddButtonWithLabel(
 		content,
-		rpl::single(u"Сохраняет сообщения локально, даже если собеседник удалил их для всех."_q));
+		rpl::single(QString::fromUtf8("Внешний вид")),
+		rpl::single(QString::fromUtf8("Секунды, стикеры")),
+		st::settingsButton,
+		{ .icon = &st::menuIconPalette, .type = IconType::Simple });
 
-	Ui::AddSkip(content);
-	Ui::AddSubsectionTitle(content, rpl::single(u"Детальные настройки"_q));
+	appearanceBtn->setClickedCallback([=] {
+		ctrl->showSettings(ZenAppearanceId());
+	});
 
-	const auto typingToggle = addCheckbox(
-		rpl::single(u"Скрывать статус набора текста"_q),
-		hooks.isTypingHidden());
+	// 3. Сеть
+	const auto networkBtn = AddButtonWithLabel(
+		content,
+		rpl::single(QString::fromUtf8("Сеть")),
+		rpl::single(QString::fromUtf8("Download Boost")),
+		st::settingsButton,
+		{ .icon = &st::menuIconNetwork, .type = IconType::Simple });
 
-	const auto readToggle = addCheckbox(
-		rpl::single(u"Скрывать отчет о прочтении"_q),
-		hooks.isReadHistoryHidden());
+	networkBtn->setClickedCallback([=] {
+		ctrl->showSettings(ZenNetworkId());
+	});
 
-	ghostToggle->checkedChanges(
-	) | rpl::on_next([=](bool checked) {
-		Relay::RelayHooks::Instance().setGhostModeEnabled(checked);
-		typingToggle->setChecked(Relay::RelayHooks::Instance().isTypingHidden());
-		readToggle->setChecked(Relay::RelayHooks::Instance().isReadHistoryHidden());
-	}, lifetime);
+	// 4. Обновления
+	const auto updatesBtn = AddButtonWithLabel(
+		content,
+		rpl::single(QString::fromUtf8("Обновления")),
+		rpl::single(QString::fromUtf8("Бейджи, OTA, бэкап")),
+		st::settingsButton,
+		{ .icon = &st::menuIconRestore, .type = IconType::Simple });
 
-	antiRecallToggle->checkedChanges(
-	) | rpl::on_next([=](bool checked) {
-		Relay::RelayHooks::Instance().setAntiRecallEnabled(checked);
-	}, lifetime);
-
-	typingToggle->checkedChanges(
-	) | rpl::on_next([=](bool checked) {
-		Relay::RelayHooks::Instance().setTypingHidden(checked);
-	}, lifetime);
-
-	readToggle->checkedChanges(
-	) | rpl::on_next([=](bool checked) {
-		Relay::RelayHooks::Instance().setReadHistoryHidden(checked);
-	}, lifetime);
+	updatesBtn->setClickedCallback([=] {
+		ctrl->showSettings(ZenUpdatesId());
+	});
 
 	Ui::AddSkip(content);
 	Ui::AddDivider(content);
 	Ui::AddSkip(content);
-	Ui::AddSubsectionTitle(content, rpl::single(u"Статистика RelayHooks"_q));
+
+	// RelayCore Stats block
+	Ui::AddSubsectionTitle(content, rpl::single(QString::fromUtf8("Статистика RelayCore")));
 
 	const auto formatStats = [] {
 		const auto &s = Relay::RelayHooks::Instance().stats();
@@ -133,12 +540,12 @@ void Zen::setupContent() {
 		content,
 		rpl::single(formatStats()));
 
-	const auto resetButton = AddButtonWithIcon(
+	const auto resetStatsBtn = AddButtonWithIcon(
 		content,
-		rpl::single(u"Сбросить счетчики перехватов"_q),
+		rpl::single(QString::fromUtf8("Сбросить счетчики перехватов")),
 		st::settingsButton);
 
-	resetButton->setClickedCallback([=] {
+	resetStatsBtn->setClickedCallback([=] {
 		Relay::RelayHooks::Instance().resetStats();
 		statsLabel->setText(formatStats());
 	});
@@ -147,7 +554,7 @@ void Zen::setupContent() {
 	Ui::AddDivider(content);
 	Ui::AddDividerText(
 		content,
-		rpl::single(u"ZenDesktop (Windows) — клиент на базе RelayHooks."_q));
+		rpl::single(QString::fromUtf8("ZenDesktop v1.0.0 (build 2601) • RelayCore 2.4")));
 
 	Ui::ResizeFitChild(this, content);
 }
@@ -156,6 +563,22 @@ void Zen::setupContent() {
 
 Type ZenId() {
 	return Zen::Id();
+}
+
+Type ZenPrivacyId() {
+	return ZenPrivacy::Id();
+}
+
+Type ZenAppearanceId() {
+	return ZenAppearance::Id();
+}
+
+Type ZenNetworkId() {
+	return ZenNetwork::Id();
+}
+
+Type ZenUpdatesId() {
+	return ZenUpdates::Id();
 }
 
 } // namespace Settings

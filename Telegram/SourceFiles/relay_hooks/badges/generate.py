@@ -49,9 +49,9 @@ BADGES = {
         "desc": "Значок разработчика ядра и плагинов RelayHooks",
         "svg_inner": """
         <!-- Command Prompt Chevron > -->
-        <path d="M8.2 9.0L11.3 12.0L8.2 15.0" fill="none" stroke="#FFFFFF" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M7.6 8.6L11.0 12.0L7.6 15.4" fill="none" stroke="#FFFFFF" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
         <!-- Underscore Cursor _ -->
-        <path d="M12.8 15.0h3.0" stroke="#FFFFFF" stroke-width="1.4" stroke-linecap="round"/>
+        <path d="M12.8 15.4h3.6" stroke="#FFFFFF" stroke-width="1.5" stroke-linecap="round"/>
         """
     },
     "badge_staff": {
@@ -141,16 +141,22 @@ def draw_highres_pngs():
             draw.line([(fx0, fy), (fx1, fy)], fill=(255, 255, 255, 255), width=lw)
 
         elif name == "badge_dev":
-            # Chevron >
-            lw = int(1.4 * scale)
-            p1 = pt(8.2, 9.0)
-            p2 = pt(11.3, 12.0)
-            p3 = pt(8.2, 15.0)
-            draw.line([p1, p2, p3], fill=(255, 255, 255, 255), width=lw, joint="round")
-            # Underscore _
-            u0 = pt(12.8, 15.0)
-            u1 = pt(15.8, 15.0)
-            draw.line([u0, u1], fill=(255, 255, 255, 255), width=lw)
+            lw = 1.5 * scale
+            radius = lw / 2.0
+            p1 = pt(7.6, 8.6)
+            p2 = pt(11.0, 12.0)
+            p3 = pt(7.6, 15.4)
+            u0 = pt(12.8, 15.4)
+            u1 = pt(16.4, 15.4)
+
+            def draw_round_line(p_start, p_end):
+                draw.line([p_start, p_end], fill=(255, 255, 255, 255), width=int(lw))
+                for p in [p_start, p_end]:
+                    draw.ellipse([p[0] - radius, p[1] - radius, p[0] + radius, p[1] + radius], fill=(255, 255, 255, 255))
+
+            draw_round_line(p1, p2)
+            draw_round_line(p2, p3)
+            draw_round_line(u0, u1)
 
         elif name == "badge_staff":
             # Lightning bolt
