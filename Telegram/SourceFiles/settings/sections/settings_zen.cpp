@@ -33,6 +33,34 @@ This file is part of Telegram Desktop fork - ZenDesktop with RelayHooks.
 namespace Settings {
 namespace {
 
+// Helper for Material 3 list item with switch toggle
+not_null<Ui::SettingsButton*> AddToggle(
+		not_null<Ui::VerticalLayout*> content,
+		rpl::producer<QString> &&label,
+		rpl::producer<bool> &&checked,
+		const style::icon *icon = nullptr) {
+	const auto btn = AddButtonWithIcon(
+		content,
+		std::move(label),
+		icon ? st::settingsButton : st::settingsButtonNoIcon,
+		icon ? IconDescriptor{ .icon = icon, .type = IconType::Simple } : IconDescriptor{});
+	btn->toggleOn(std::move(checked));
+	return btn;
+}
+
+// Inset divider (M3 style: 1px line inset aligned with text)
+void AddInsetDivider(not_null<Ui::VerticalLayout*> content, int leftMargin = 60) {
+	const auto divider = content->add(
+		object_ptr<Ui::FixedHeightWidget>(content, 1),
+		QMargins(leftMargin, 0, 0, 0));
+	divider->paintRequest() | rpl::on_next([=] {
+		auto p = QPainter(divider);
+		auto c = st::windowFg->c;
+		c.setAlphaF(0.08); // M3 outline-variant tone
+		p.fillRect(divider->rect(), c);
+	}, divider->lifetime());
+}
+
 // ==========================================
 // 1. Privacy & Stealth Section (Приватность)
 // ==========================================
@@ -64,58 +92,62 @@ void ZenPrivacy::setupContent() {
 	auto &lifetime = content->lifetime();
 	auto &hooks = Relay::RelayHooks::Instance();
 
-	const auto addCheckbox = [&](rpl::producer<QString> &&label, bool checked) {
-		return content->add(
-			object_ptr<Ui::Checkbox>(
-				content,
-				std::move(label),
-				checked,
-				st::settingsCheckbox),
-			st::settingsCheckboxPadding);
-	};
+	const auto ghostStream = lifetime.make_state<rpl::event_stream<bool>>();
+	const auto typingStream = lifetime.make_state<rpl::event_stream<bool>>();
+	const auto readStream = lifetime.make_state<rpl::event_stream<bool>>();
+	const auto storiesStream = lifetime.make_state<rpl::event_stream<bool>>();
 
 	Ui::AddSkip(content);
 	Ui::AddSubsectionTitle(content, rpl::single(QString::fromUtf8("Стелс-режим (Ghost Mode)")));
 
-	const auto ghostToggle = addCheckbox(
+	const auto ghostToggle = AddToggle(
+		content,
 		rpl::single(QString::fromUtf8("Ghost Mode (Невидимка)")),
-		hooks.isGhostModeEnabled());
+		ghostStream->events_starting_with(hooks.isGhostModeEnabled()),
+		&st::menuIconStealth);
 
 	Ui::AddDividerText(
 		content,
 		rpl::single(QString::fromUtf8("Скрывает факт прочтения входящих сообщений и предотвращает отправку статуса набора текста собеседникам.")));
 
-	const auto typingToggle = addCheckbox(
+	const auto typingToggle = AddToggle(
+		content,
 		rpl::single(QString::fromUtf8("Скрывать статус набора текста")),
-		hooks.isTypingHidden());
+		typingStream->events_starting_with(hooks.isTypingHidden()));
 
-	const auto readToggle = addCheckbox(
+	AddInsetDivider(content, 22);
+
+	const auto readToggle = AddToggle(
+		content,
 		rpl::single(QString::fromUtf8("Скрывать отчет о прочтении")),
-		hooks.isReadHistoryHidden());
+		readStream->events_starting_with(hooks.isReadHistoryHidden()));
 
-	const auto storiesToggle = addCheckbox(
+	AddInsetDivider(content, 22);
+
+	const auto storiesToggle = AddToggle(
+		content,
 		rpl::single(QString::fromUtf8("Скрывать просмотр историй (Stories)")),
-		hooks.isStoriesStealthEnabled());
+		storiesStream->events_starting_with(hooks.isStoriesStealthEnabled()));
 
-	ghostToggle->checkedChanges(
+	ghostToggle->toggledChanges(
 	) | rpl::on_next([=](bool checked) {
 		Relay::RelayHooks::Instance().setGhostModeEnabled(checked);
-		typingToggle->setChecked(Relay::RelayHooks::Instance().isTypingHidden());
-		readToggle->setChecked(Relay::RelayHooks::Instance().isReadHistoryHidden());
-		storiesToggle->setChecked(Relay::RelayHooks::Instance().isStoriesStealthEnabled());
+		typingStream->fire(Relay::RelayHooks::Instance().isTypingHidden());
+		readStream->fire(Relay::RelayHooks::Instance().isReadHistoryHidden());
+		storiesStream->fire(Relay::RelayHooks::Instance().isStoriesStealthEnabled());
 	}, lifetime);
 
-	typingToggle->checkedChanges(
+	typingToggle->toggledChanges(
 	) | rpl::on_next([=](bool checked) {
 		Relay::RelayHooks::Instance().setTypingHidden(checked);
 	}, lifetime);
 
-	readToggle->checkedChanges(
+	readToggle->toggledChanges(
 	) | rpl::on_next([=](bool checked) {
 		Relay::RelayHooks::Instance().setReadHistoryHidden(checked);
 	}, lifetime);
 
-	storiesToggle->checkedChanges(
+	storiesToggle->toggledChanges(
 	) | rpl::on_next([=](bool checked) {
 		Relay::RelayHooks::Instance().setStoriesStealthEnabled(checked);
 	}, lifetime);
@@ -126,59 +158,73 @@ void ZenPrivacy::setupContent() {
 
 	Ui::AddSubsectionTitle(content, rpl::single(QString::fromUtf8("Защита сообщений и приватность")));
 
-	const auto antiRecallToggle = addCheckbox(
+	const auto antiRecallToggle = AddToggle(
+		content,
 		rpl::single(QString::fromUtf8("Anti-Recall (Сохранение удаленных)")),
-		hooks.isAntiRecallEnabled());
+		rpl::single(hooks.isAntiRecallEnabled()),
+		&st::menuIconPermissions);
 
 	Ui::AddDividerText(
 		content,
 		rpl::single(QString::fromUtf8("Сохраняет удаленные собеседником сообщения локально с визуальной пометкой [удалено].")));
 
-	antiRecallToggle->checkedChanges(
-	) | rpl::on_next([=](bool checked) {
-		Relay::RelayHooks::Instance().setAntiRecallEnabled(checked);
-	}, lifetime);
-
-	const auto noSponsoredToggle = addCheckbox(
+	const auto noSponsoredToggle = AddToggle(
+		content,
 		rpl::single(QString::fromUtf8("Отключение рекламы (No Sponsored)")),
-		hooks.isNoSponsoredEnabled());
+		rpl::single(hooks.isNoSponsoredEnabled()),
+		&st::menuIconCancel);
 
 	Ui::AddDividerText(
 		content,
 		rpl::single(QString::fromUtf8("Блокирует показ нативных спонсированных рекламных постов Telegram в каналах и видео.")));
 
-	noSponsoredToggle->checkedChanges(
-	) | rpl::on_next([=](bool checked) {
-		Relay::RelayHooks::Instance().setNoSponsoredEnabled(checked);
-	}, lifetime);
-
-	const auto hidePhoneToggle = addCheckbox(
+	const auto hidePhoneToggle = AddToggle(
+		content,
 		rpl::single(QString::fromUtf8("Скрывать свой номер телефона")),
-		hooks.isHidePhoneNumberEnabled());
+		rpl::single(hooks.isHidePhoneNumberEnabled()),
+		&st::menuIconPermissions);
 
-	hidePhoneToggle->checkedChanges(
-	) | rpl::on_next([=](bool checked) {
-		Relay::RelayHooks::Instance().setHidePhoneNumberEnabled(checked);
-	}, lifetime);
+	AddInsetDivider(content, 60);
 
-	const auto hideSensitiveToggle = addCheckbox(
+	const auto hideSensitiveToggle = AddToggle(
+		content,
 		rpl::single(QString::fromUtf8("Отключить предупреждения о деликатном контенте")),
-		hooks.isHideSensitiveMediaEnabled());
+		rpl::single(hooks.isHideSensitiveMediaEnabled()),
+		&st::menuIconShowInChat);
 
-	hideSensitiveToggle->checkedChanges(
-	) | rpl::on_next([=](bool checked) {
-		Relay::RelayHooks::Instance().setHideSensitiveMediaEnabled(checked);
-	}, lifetime);
+	AddInsetDivider(content, 60);
 
-	const auto streamerToggle = addCheckbox(
+	const auto streamerToggle = AddToggle(
+		content,
 		rpl::single(QString::fromUtf8("Режим стримера (Streamer Mode)")),
-		hooks.isStreamerModeEnabled());
+		rpl::single(hooks.isStreamerModeEnabled()),
+		&st::menuIconProfile);
 
 	Ui::AddDividerText(
 		content,
 		rpl::single(QString::fromUtf8("Скрывает номер телефона, email и юзернеймы на экране во время демонстрации экрана или трансляции.")));
 
-	streamerToggle->checkedChanges(
+	antiRecallToggle->toggledChanges(
+	) | rpl::on_next([=](bool checked) {
+		Relay::RelayHooks::Instance().setAntiRecallEnabled(checked);
+	}, lifetime);
+
+	noSponsoredToggle->toggledChanges(
+	) | rpl::on_next([=](bool checked) {
+		Relay::RelayHooks::Instance().setNoSponsoredEnabled(checked);
+	}, lifetime);
+
+	hidePhoneToggle->toggledChanges(
+	) | rpl::on_next([=](bool checked) {
+		Relay::RelayHooks::Instance().setHidePhoneNumberEnabled(checked);
+	}, lifetime);
+
+	hideSensitiveToggle->toggledChanges(
+	) | rpl::on_next([=](bool checked) {
+		Relay::RelayHooks::Instance().setHideSensitiveMediaEnabled(checked);
+	}, lifetime);
+
+	streamerToggle->toggledChanges(
 	) | rpl::on_next([=](bool checked) {
 		Relay::RelayHooks::Instance().setStreamerModeEnabled(checked);
 	}, lifetime);
@@ -217,51 +263,55 @@ void ZenAppearance::setupContent() {
 	auto &lifetime = content->lifetime();
 	auto &hooks = Relay::RelayHooks::Instance();
 
-	const auto addCheckbox = [&](rpl::producer<QString> &&label, bool checked) {
-		return content->add(
-			object_ptr<Ui::Checkbox>(
-				content,
-				std::move(label),
-				checked,
-				st::settingsCheckbox),
-			st::settingsCheckboxPadding);
-	};
-
 	Ui::AddSkip(content);
 	Ui::AddSubsectionTitle(content, rpl::single(QString::fromUtf8("Интерфейс и стили")));
 
-	const auto secondsToggle = addCheckbox(
-		rpl::single(QString::fromUtf8("Отображать секунды в сообщениях")),
-		hooks.isShowSecondsEnabled());
-
-	secondsToggle->checkedChanges(
-	) | rpl::on_next([=](bool checked) {
-		Relay::RelayHooks::Instance().setShowSecondsEnabled(checked);
-	}, lifetime);
-
-	const auto swissToggle = addCheckbox(
+	const auto swissToggle = AddToggle(
+		content,
 		rpl::single(QString::fromUtf8("Анимации в стиле Swiss Motion")),
-		hooks.isSwissMotionEnabled());
+		rpl::single(hooks.isSwissMotionEnabled()),
+		&st::menuIconFave);
 
-	swissToggle->checkedChanges(
+	AddInsetDivider(content, 60);
+
+	const auto secondsToggle = AddToggle(
+		content,
+		rpl::single(QString::fromUtf8("Отображать секунды в сообщениях")),
+		rpl::single(hooks.isShowSecondsEnabled()),
+		&st::menuIconEdit);
+
+	AddInsetDivider(content, 60);
+
+	const auto hideMuteToggle = AddToggle(
+		content,
+		rpl::single(QString::fromUtf8("Скрывать иконку без звука в списке чатов")),
+		rpl::single(hooks.isHideMuteIconEnabled()),
+		&st::menuIconArchive);
+
+	AddInsetDivider(content, 60);
+
+	const auto customBubbleToggle = AddToggle(
+		content,
+		rpl::single(QString::fromUtf8("Цветовые акценты Material 3 / Electric Blue")),
+		rpl::single(hooks.isCustomBubbleColorEnabled()),
+		&st::menuIconDraw);
+
+	swissToggle->toggledChanges(
 	) | rpl::on_next([=](bool checked) {
 		Relay::RelayHooks::Instance().setSwissMotionEnabled(checked);
 	}, lifetime);
 
-	const auto hideMuteToggle = addCheckbox(
-		rpl::single(QString::fromUtf8("Скрывать иконку без звука в списке чатов")),
-		hooks.isHideMuteIconEnabled());
+	secondsToggle->toggledChanges(
+	) | rpl::on_next([=](bool checked) {
+		Relay::RelayHooks::Instance().setShowSecondsEnabled(checked);
+	}, lifetime);
 
-	hideMuteToggle->checkedChanges(
+	hideMuteToggle->toggledChanges(
 	) | rpl::on_next([=](bool checked) {
 		Relay::RelayHooks::Instance().setHideMuteIconEnabled(checked);
 	}, lifetime);
 
-	const auto customBubbleToggle = addCheckbox(
-		rpl::single(QString::fromUtf8("Цветовые акценты Material 3 / Electric Blue")),
-		hooks.isCustomBubbleColorEnabled());
-
-	customBubbleToggle->checkedChanges(
+	customBubbleToggle->toggledChanges(
 	) | rpl::on_next([=](bool checked) {
 		Relay::RelayHooks::Instance().setCustomBubbleColorEnabled(checked);
 	}, lifetime);
@@ -272,11 +322,13 @@ void ZenAppearance::setupContent() {
 
 	Ui::AddSubsectionTitle(content, rpl::single(QString::fromUtf8("Стикеры и медиа")));
 
-	const auto cleanStickersToggle = addCheckbox(
+	const auto cleanStickersToggle = AddToggle(
+		content,
 		rpl::single(QString::fromUtf8("Компактный просмотр стикеров")),
-		hooks.isCleanStickersEnabled());
+		rpl::single(hooks.isCleanStickersEnabled()),
+		&st::menuIconStickers);
 
-	cleanStickersToggle->checkedChanges(
+	cleanStickersToggle->toggledChanges(
 	) | rpl::on_next([=](bool checked) {
 		Relay::RelayHooks::Instance().setCleanStickersEnabled(checked);
 	}, lifetime);
@@ -312,32 +364,31 @@ rpl::producer<QString> ZenMessages::title() {
 
 void ZenMessages::setupContent() {
 	const auto content = Ui::CreateChild<Ui::VerticalLayout>(this);
-	auto &lifetime = content->lifetime();
-
-	const auto addCheckbox = [&](rpl::producer<QString> &&label, bool checked) {
-		return content->add(
-			object_ptr<Ui::Checkbox>(
-				content,
-				std::move(label),
-				checked,
-				st::settingsCheckbox),
-			st::settingsCheckboxPadding);
-	};
 
 	Ui::AddSkip(content);
 	Ui::AddSubsectionTitle(content, rpl::single(QString::fromUtf8("Ввод и форматирование")));
 
-	const auto formatBar = addCheckbox(
+	const auto formatBar = AddToggle(
+		content,
 		rpl::single(QString::fromUtf8("Всегда показывать панель форматирования")),
-		true);
+		rpl::single(true),
+		&st::menuIconEdit);
 
-	const auto quickReactions = addCheckbox(
+	AddInsetDivider(content, 60);
+
+	const auto quickReactions = AddToggle(
+		content,
 		rpl::single(QString::fromUtf8("Быстрые реакции по двойному клику")),
-		true);
+		rpl::single(true),
+		&st::menuIconReactions);
 
-	const auto directDownload = addCheckbox(
+	AddInsetDivider(content, 60);
+
+	const auto directDownload = AddToggle(
+		content,
 		rpl::single(QString::fromUtf8("Скачивать медиа без открытия предпросмотра")),
-		false);
+		rpl::single(false),
+		&st::menuIconDownload);
 
 	Ui::AddDividerText(
 		content,
@@ -374,28 +425,23 @@ rpl::producer<QString> ZenTranslate::title() {
 
 void ZenTranslate::setupContent() {
 	const auto content = Ui::CreateChild<Ui::VerticalLayout>(this);
-	auto &lifetime = content->lifetime();
-
-	const auto addCheckbox = [&](rpl::producer<QString> &&label, bool checked) {
-		return content->add(
-			object_ptr<Ui::Checkbox>(
-				content,
-				std::move(label),
-				checked,
-				st::settingsCheckbox),
-			st::settingsCheckboxPadding);
-	};
 
 	Ui::AddSkip(content);
 	Ui::AddSubsectionTitle(content, rpl::single(QString::fromUtf8("Сервис перевода")));
 
-	const auto translateFullChat = addCheckbox(
+	const auto translateFullChat = AddToggle(
+		content,
 		rpl::single(QString::fromUtf8("Кнопка перевода всего чата в шапке")),
-		true);
+		rpl::single(true),
+		&st::menuIconShowInChat);
 
-	const auto showOriginal = addCheckbox(
+	AddInsetDivider(content, 60);
+
+	const auto showOriginal = AddToggle(
+		content,
 		rpl::single(QString::fromUtf8("Показывать исходный текст при наведении")),
-		true);
+		rpl::single(true),
+		&st::menuIconCopy);
 
 	Ui::AddDividerText(
 		content,
@@ -435,35 +481,29 @@ void ZenNetwork::setupContent() {
 	auto &lifetime = content->lifetime();
 	auto &hooks = Relay::RelayHooks::Instance();
 
-	const auto addCheckbox = [&](rpl::producer<QString> &&label, bool checked) {
-		return content->add(
-			object_ptr<Ui::Checkbox>(
-				content,
-				std::move(label),
-				checked,
-				st::settingsCheckbox),
-			st::settingsCheckboxPadding);
-	};
-
 	Ui::AddSkip(content);
 	Ui::AddSubsectionTitle(content, rpl::single(QString::fromUtf8("Ускорение и прокси")));
 
-	const auto boostToggle = addCheckbox(
+	const auto boostToggle = AddToggle(
+		content,
 		rpl::single(QString::fromUtf8("Ускорение загрузки файлов (Download Boost)")),
-		hooks.isDownloadBoostEnabled());
+		rpl::single(hooks.isDownloadBoostEnabled()),
+		&st::menuIconDownload);
 
 	Ui::AddDividerText(
 		content,
 		rpl::single(QString::fromUtf8("Разбивает большие файлы на параллельные потоки для максимальной скорости скачивания медиа.")));
 
-	boostToggle->checkedChanges(
+	const auto wsProxyToggle = AddToggle(
+		content,
+		rpl::single(QString::fromUtf8("Поддержка WebSocket прокси (tg-ws-proxy)")),
+		rpl::single(true),
+		&st::menuIconLink);
+
+	boostToggle->toggledChanges(
 	) | rpl::on_next([=](bool checked) {
 		Relay::RelayHooks::Instance().setDownloadBoostEnabled(checked);
 	}, lifetime);
-
-	const auto wsProxyToggle = addCheckbox(
-		rpl::single(QString::fromUtf8("Поддержка WebSocket прокси (tg-ws-proxy)")),
-		true);
 
 	Ui::ResizeFitChild(this, content);
 }
@@ -539,24 +579,16 @@ void ZenUpdates::setupContent() {
 	auto &updater = Relay::ZenUpdater::Instance();
 	const auto ctrl = controller();
 
-	const auto addCheckbox = [&](rpl::producer<QString> &&label, bool checked) {
-		return content->add(
-			object_ptr<Ui::Checkbox>(
-				content,
-				std::move(label),
-				checked,
-				st::settingsCheckbox),
-			st::settingsCheckboxPadding);
-	};
-
 	Ui::AddSkip(content);
 	Ui::AddSubsectionTitle(content, rpl::single(QString::fromUtf8("Автообновление (OTA)")));
 
-	const auto otaToggle = addCheckbox(
+	const auto otaToggle = AddToggle(
+		content,
 		rpl::single(QString::fromUtf8("Автоматически проверять обновления ZenDesktop")),
-		updater.isAutoCheckEnabled());
+		rpl::single(updater.isAutoCheckEnabled()),
+		&st::menuIconRestore);
 
-	otaToggle->checkedChanges(
+	otaToggle->toggledChanges(
 	) | rpl::on_next([=](bool checked) {
 		Relay::ZenUpdater::Instance().setAutoCheckEnabled(checked);
 	}, lifetime);
