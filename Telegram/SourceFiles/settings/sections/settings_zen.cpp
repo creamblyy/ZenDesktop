@@ -706,8 +706,7 @@ void ZenSupport::setupContent() {
 		{ .icon = &st::menuIconLike, .type = IconType::Simple });
 
 	badgeBtn->setClickedCallback([=] {
-		Relay::ZenBadges::Instance().refresh();
-		ctrl->show(Ui::MakeInformBox(QString::fromUtf8("Бейджи успешно синхронизированы.")));
+		Relay::ZenBadges::Instance().syncFromRemote(ctrl);
 	});
 
 	Ui::ResizeFitChild(this, content);

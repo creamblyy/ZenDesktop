@@ -44,6 +44,9 @@ public:
 	bool loadFromFile(const QString &filePath);
 	[[nodiscard]] QString exportToJson() const;
 	void syncFromRemote(Window::SessionController *controller = nullptr);
+	void refresh(Window::SessionController *controller = nullptr) {
+		syncFromRemote(controller);
+	}
 
 	// Drawing helper in chat lists and headers
 	int drawBadge(QPainter &p, const QRect &rectForName, int nameWidth, int outerWidth, uint64_t peerId);
