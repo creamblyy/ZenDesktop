@@ -110,35 +110,35 @@ jobs:
         shell: pwsh
         run: |
           $qtPrefix = "$env:LibrariesPath\Qt-6.12.0"
-          $targets = @(
-              @{ Sub = "Gui_resources_1"; Obj = "qrc_qpdf_init.cpp.obj" },
-              @{ Sub = "Gui_resources_2"; Obj = "qrc_gui_shaders_init.cpp.obj" },
-              @{ Sub = "Widgets_resources_1"; Obj = "qrc_qstyle_init.cpp.obj" },
-              @{ Sub = "Widgets_resources_2"; Obj = "qrc_qstyle1_init.cpp.obj" },
-              @{ Sub = "Widgets_resources_3"; Obj = "qrc_qstyle_fusion_init.cpp.obj" },
-              @{ Sub = "Widgets_resources_4"; Obj = "qrc_qmessagebox_init.cpp.obj" },
-              @{ Sub = "PrintSupport_resources_1"; Obj = "qrc_qprintdialog_init.cpp.obj" },
-              @{ Sub = "PrintSupport_resources_2"; Obj = "qrc_qprintdialog1_init.cpp.obj" },
-              @{ Sub = "QWindowsIntegrationPlugin_resources_1"; Obj = "qrc_openglblacklists_init.cpp.obj" },
-              @{ Sub = "QWindowsIntegrationPlugin_resources_2"; Obj = "qrc_cursors_init.cpp.obj" },
-              @{ Sub = "QWindowsDirect2DIntegrationPlugin_resources_1"; Obj = "qrc_openglblacklists_init.cpp.obj" },
-              @{ Sub = "QWindowsDirect2DIntegrationPlugin_resources_2"; Obj = "qrc_cursors_init.cpp.obj" }
-          )
           $stubCpp = "$env:TEMP\qt_rcc_stub.cpp"
           "extern `"C`" void qt_rcc_stub() {}" | Set-Content -Path $stubCpp -Encoding ascii
-          foreach ($cfg in @("Debug", "RelWithDebInfo")) {
-              $destBase = "$qtPrefix\lib\objects-$cfg"
-              foreach ($t in $targets) {
-                  $targetDir = "$destBase\$($t.Sub)\.qt\rcc"
-                  $targetObj = "$targetDir\$($t.Obj)"
+          $stubObj = "$env:TEMP\qt_stub.obj"
+          & cl.exe /nologo /c /MD $stubCpp /Fo"$stubObj"
+
+          $cmakeFiles = Get-ChildItem -Path "$qtPrefix" -Filter "*.cmake" -Recurse -File
+          foreach ($file in $cmakeFiles) {
+              $content = Get-Content $file.FullName -Raw
+              $matches = [regex]::Matches($content, '([a-zA-Z0-9_\-\.\/\\:\$]{0,50}objects\-(Debug|Release|RelWithDebInfo)[a-zA-Z0-9_\-\.\/\\:]*\.obj)')
+              foreach ($m in $matches) {
+                  $val = $m.Value.Trim('"`''')
+                  if ($val -match '^[a-zA-Z]:') {
+                      $targetObj = $val.Replace('/', '\')
+                  } else {
+                      $clean = $val.Replace('${_IMPORT_PREFIX}', '').TrimStart('/\').Replace('/', '\')
+                      $targetObj = "$qtPrefix\$clean"
+                  }
                   if (-not (Test-Path $targetObj)) {
-                      New-Item -ItemType Directory -Path $targetDir -Force | Out-Null
-                      & cl.exe /nologo /c /MD $stubCpp /Fo"$targetObj"
+                      $dir = Split-Path $targetObj -Parent
+                      if (-not (Test-Path $dir)) {
+                          New-Item -ItemType Directory -Path $dir -Force | Out-Null
+                      }
+                      Copy-Item "$stubObj" -Destination "$targetObj" -Force
+                      Write-Host "Restored: $targetObj"
                   }
               }
           }
           $global:LASTEXITCODE = 0
-          Write-Host "Qt resource objects verification complete."
+          Write-Host "Qt resource and plugin objects verification complete."
 
       - name: Configure CMake for ZenDesktop
         run: |
