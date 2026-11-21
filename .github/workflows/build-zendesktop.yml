@@ -21,9 +21,6 @@ jobs:
       TBUILD_PATH: D:\TBuild
       SKIP_DUMPSYMS: "1"
       CARGO_INCREMENTAL: "0"
-      PreferredToolArchitecture: "x64"
-      UseEnv: "true"
-      CL: "/MP2"
 
     defaults:
       run:
