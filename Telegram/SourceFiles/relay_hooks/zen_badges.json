@@ -6,17 +6,13 @@
       "type": "dev",
       "title": "Zen Developer"
     },
-    "987654321": {
-      "type": "staff",
-      "title": "Zen Staff / Verified"
-    },
-    "112233445": {
-      "type": "supporter",
-      "title": "Zen Supporter"
-    },
-    "-1001987654321": {
+    "3721819870": {
       "type": "desktop",
-      "title": "ZenDesktop Official"
+      "title": "ZenDesktop Channel"
+    },
+    "4431413090": {
+      "type": "desktop",
+      "title": "ZenDesktop Chat"
     }
   }
 }
