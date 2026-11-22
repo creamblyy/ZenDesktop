@@ -9,11 +9,13 @@
   <style>
     :root {
       --bg: #0e0e10;
-      --surface: rgba(20, 22, 27, 0.78);
-      --surface-card: rgba(24, 27, 34, 0.86);
-      --surface-hover: rgba(34, 38, 48, 0.9);
-      --border: rgba(244, 239, 230, 0.09);
-      --border-strong: rgba(244, 239, 230, 0.16);
+      --surface: rgba(18, 22, 32, 0.34);
+      --surface-card: rgba(24, 29, 42, 0.48);
+      --surface-hover: rgba(32, 38, 54, 0.56);
+      --border: rgba(255, 255, 255, 0.16);
+      --border-strong: rgba(255, 255, 255, 0.28);
+      --glass-blur: blur(18px) saturate(135%);
+      --glass-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22), inset 0 -1px 0 rgba(0, 0, 0, 0.25), 0 12px 32px rgba(0, 0, 0, 0.28);
       --text: #f4efe6;
       --text-muted: rgba(244, 239, 230, 0.64);
       --text-dim: rgba(244, 239, 230, 0.42);
@@ -74,9 +76,9 @@
       position: sticky;
       top: 0;
       z-index: 30;
-      backdrop-filter: blur(16px);
-      -webkit-backdrop-filter: blur(16px);
-      background: rgba(14, 14, 16, 0.72);
+      backdrop-filter: blur(20px) saturate(140%);
+      -webkit-backdrop-filter: blur(20px) saturate(140%);
+      background: rgba(14, 16, 22, 0.42);
       border-bottom: 1px solid var(--border);
     }
 
@@ -300,12 +302,15 @@
 
     .fcard {
       background: var(--surface);
+      backdrop-filter: var(--glass-blur);
+      -webkit-backdrop-filter: var(--glass-blur);
       border: 1px solid var(--border);
+      box-shadow: var(--glass-shadow);
       border-radius: 28px;
       padding: 24px 24px 20px;
       display: flex;
       flex-direction: column;
-      transition: background 0.25s var(--ease), border-color 0.25s var(--ease);
+      transition: background 0.25s var(--ease), border-color 0.25s var(--ease), box-shadow 0.25s var(--ease);
     }
 
     .fcard:hover,
@@ -414,7 +419,10 @@
       gap: 12px;
       padding: 16px 18px;
       background: var(--surface);
+      backdrop-filter: var(--glass-blur);
+      -webkit-backdrop-filter: var(--glass-blur);
       border: 1px solid var(--border);
+      box-shadow: var(--glass-shadow);
       border-radius: 20px;
       text-decoration: none;
       color: var(--text);
@@ -481,7 +489,10 @@
 
     .acc-item {
       background: var(--surface);
+      backdrop-filter: var(--glass-blur);
+      -webkit-backdrop-filter: var(--glass-blur);
       border: 1px solid var(--border);
+      box-shadow: var(--glass-shadow);
       border-radius: 22px;
       overflow: hidden;
       transition: border-color 0.25s var(--ease), background 0.25s var(--ease);
