@@ -523,17 +523,20 @@
       transition: background 0.25s var(--ease), border-radius 0.5s var(--ease-spring), transform 0.3s var(--ease-spring), color 0.25s var(--ease);
     }
 
-    .acc-trigger:hover .acc-fab {
+    .acc-trigger:hover .acc-fab,
+    .fcard-toggle:hover {
       border-radius: 12px;
       background: rgba(244, 239, 230, 0.12);
       color: var(--text);
     }
 
-    .acc-trigger:active .acc-fab {
+    .acc-trigger:active .acc-fab,
+    .fcard-toggle:active {
       transform: scale(.9);
     }
 
-    .acc-item.active .acc-fab {
+    .acc-item.active .acc-fab,
+    .fcard.open .acc-fab {
       background: var(--accent);
       border-color: transparent;
       color: #ffffff;
@@ -546,7 +549,8 @@
       transition: transform 0.5s var(--ease-spring);
     }
 
-    .acc-item.active .acc-plus {
+    .acc-item.active .acc-plus,
+    .fcard.open .acc-plus {
       transform: rotate(135deg);
     }
 
