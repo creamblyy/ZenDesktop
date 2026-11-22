@@ -1077,14 +1077,16 @@ void PaintRow(
 		const auto dividerLeft = context.narrow
 			? geometry.x()
 			: (geometry.x() + context.st->padding.left() + context.st->photoSize + context.st->padding.left());
-		const auto dividerWidth = geometry.width() - (dividerLeft - geometry.x());
+		const auto dividerWidth = geometry.width() - (dividerLeft - geometry.x()) - st::dialogsPadding.right();
 		if (dividerWidth > 0 && !context.active) {
+			auto dividerColor = st::windowFg->c;
+			dividerColor.setAlphaF(0.08);
 			p.fillRect(
 				dividerLeft,
 				geometry.y() + geometry.height() - st::lineWidth,
 				dividerWidth,
 				st::lineWidth,
-				st::dialogsBgOver);
+				dividerColor);
 		}
 	}
 }

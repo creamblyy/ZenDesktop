@@ -113,21 +113,24 @@ void ZenPrivacy::setupContent() {
 	const auto typingToggle = AddToggle(
 		content,
 		rpl::single(QString::fromUtf8("Скрывать статус набора текста")),
-		typingStream->events_starting_with(hooks.isTypingHidden()));
+		typingStream->events_starting_with(hooks.isTypingHidden()),
+		&st::menuIconEdit);
 
-	AddInsetDivider(content, 22);
+	AddInsetDivider(content, 60);
 
 	const auto readToggle = AddToggle(
 		content,
 		rpl::single(QString::fromUtf8("Скрывать отчет о прочтении")),
-		readStream->events_starting_with(hooks.isReadHistoryHidden()));
+		readStream->events_starting_with(hooks.isReadHistoryHidden()),
+		&st::menuIconShowInChat);
 
-	AddInsetDivider(content, 22);
+	AddInsetDivider(content, 60);
 
 	const auto storiesToggle = AddToggle(
 		content,
 		rpl::single(QString::fromUtf8("Скрывать просмотр историй (Stories)")),
-		storiesStream->events_starting_with(hooks.isStoriesStealthEnabled()));
+		storiesStream->events_starting_with(hooks.isStoriesStealthEnabled()),
+		&st::menuIconStealth);
 
 	ghostToggle->toggledChanges(
 	) | rpl::on_next([=](bool checked) {

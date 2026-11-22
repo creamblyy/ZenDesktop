@@ -6,6 +6,11 @@ For license and copyright information please follow this link:
 https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "core/application.h"
+#include "relay_hooks/relay_hooks.h"
+
+#include <QtCore/QTimer>
+#include <QtCore/QPointer>
+#include <QtGui/QWheelEvent>
 
 #include "data/data_abstract_structure.h"
 #include "data/data_channel.h"
@@ -748,6 +753,77 @@ bool Application::eventFilter(QObject *object, QEvent *e) {
 	case QEvent::TouchBegin:
 	case QEvent::Wheel: {
 		updateNonIdle();
+		if (Relay::RelayHooks::Instance().isSmoothScrollEnabled()
+			&& object
+			&& object->isWidgetType()) {
+			const auto ev = static_cast<QWheelEvent*>(e);
+			static auto Synthesizing = false;
+			if (!Synthesizing
+				&& ev->source() == Qt::MouseEventNotSynthesized
+				&& ev->modifiers() == Qt::NoModifier
+				&& ev->pixelDelta().isNull()
+				&& ev->angleDelta().y() != 0) {
+				struct SmoothScrollState {
+					QPointer<QWidget> target;
+					QPointF localPos;
+					QPointF globalPos;
+					double remaining = 0.0;
+					QTimer timer;
+				};
+				static SmoothScrollState State;
+				static const auto Init = [&] {
+					State.timer.setInterval(10);
+					QObject::connect(&State.timer, &QTimer::timeout, [] {
+						if (!State.target || std::abs(State.remaining) < 0.5) {
+							State.remaining = 0.0;
+							State.timer.stop();
+							return;
+						}
+						auto step = State.remaining * 0.22;
+						if (std::abs(step) < 1.0) {
+							step = (State.remaining > 0)
+								? std::min(1.0, State.remaining)
+								: std::max(-1.0, State.remaining);
+						}
+						const auto pixelStep = int(std::round(step));
+						if (pixelStep == 0) {
+							State.remaining = 0.0;
+							State.timer.stop();
+							return;
+						}
+						State.remaining -= pixelStep;
+						QWheelEvent synth(
+							State.localPos,
+							State.globalPos,
+							QPoint(0, pixelStep),
+							QPoint(0, pixelStep),
+							Qt::NoButton,
+							Qt::NoModifier,
+							Qt::ScrollUpdate,
+							false,
+							Qt::MouseEventSynthesizedByApplication);
+						Synthesizing = true;
+						QCoreApplication::sendEvent(State.target.data(), &synth);
+						Synthesizing = false;
+					});
+					return true;
+				}();
+				(void)Init;
+
+				const auto widget = static_cast<QWidget*>(object);
+				if (State.target != widget) {
+					State.remaining = 0.0;
+					State.target = widget;
+				}
+				State.localPos = ev->position();
+				State.globalPos = ev->globalPosition();
+				State.remaining += ev->angleDelta().y() * 0.9;
+				if (!State.timer.isActive()) {
+					State.timer.start();
+				}
+				return true;
+			}
+		}
 	} break;
 
 	case QEvent::KeyRelease: {

@@ -77,6 +77,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "ui/toast/toast.h"
 #include "ui/vertical_list.h"
 #include "ui/widgets/buttons.h"
+#include <QtGui/QPainter>
 #include "ui/effects/ripple_animation.h"
 #include "ui/widgets/continuous_sliders.h"
 #include "ui/widgets/menu/menu_add_action_callback.h"
@@ -367,6 +368,16 @@ void BuildSectionButtons(SectionBuilder &builder) {
 	const auto controller = builder.controller();
 	const auto showOther = builder.showOther();
 
+	builder.addSectionButton({
+		.title = rpl::single(u"Настройки ZenDesktop"_q),
+		.targetSection = ZenId(),
+		.icon = { &st::menuIconManage },
+		.keywords = { u"zen"_q, u"zendesktop"_q, u"relay"_q, u"hooks"_q, u"ghost"_q, u"anti-recall"_q },
+	});
+
+	builder.addDivider();
+	builder.addSkip();
+
 	if (!session->supportMode()) {
 		builder.addButton({
 			.title = tr::lng_settings_my_account(),
@@ -439,13 +450,6 @@ void BuildSectionButtons(SectionBuilder &builder) {
 		.targetSection = AdvancedId(),
 		.icon = { &st::menuIconManage },
 		.keywords = { u"performance"_q, u"proxy"_q, u"experimental"_q },
-	});
-
-	builder.addSectionButton({
-		.title = rpl::single(u"ZenDesktop"_q),
-		.targetSection = ZenId(),
-		.icon = { &st::menuIconManage },
-		.keywords = { u"zen"_q, u"zendesktop"_q, u"relay"_q, u"hooks"_q, u"ghost"_q, u"anti-recall"_q },
 	});
 
 	builder.addSectionButton({
@@ -781,6 +785,17 @@ void Main::setupContent() {
 		}, lifetime);
 	};
 	build(content, buildMethod);
+
+	for (const auto child : content->children()) {
+		if (const auto btn = dynamic_cast<Ui::SettingsButton*>(child)) {
+			btn->paintRequest() | rpl::on_next([=] {
+				auto p = QPainter(btn);
+				auto divider = st::windowFg->c;
+				divider.setAlphaF(0.07);
+				p.fillRect(56, btn->height() - 1, btn->width() - 72, 1, divider);
+			}, btn->lifetime());
+		}
+	}
 
 	Ui::ResizeFitChild(this, content);
 
