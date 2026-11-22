@@ -6,10 +6,12 @@ This file is part of Telegram Desktop fork - ZenDesktop with RelayHooks.
 #include "window/window_session_controller.h"
 #include "ui/boxes/confirm_box.h"
 
+#include <QtCore/QCoreApplication>
 #include <QtCore/QFile>
 #include <QtCore/QJsonDocument>
 #include <QtCore/QJsonObject>
 #include <QtCore/QJsonValue>
+#include <QtGui/QPainterPath>
 #include <QtNetwork/QNetworkAccessManager>
 #include <QtNetwork/QNetworkReply>
 #include <QtNetwork/QNetworkRequest>
@@ -20,6 +22,11 @@ namespace {
 constexpr auto kBadgeWidth = 16;
 constexpr auto kBadgeHeight = 16;
 constexpr auto kBadgeSpacing = 4;
+constexpr auto kBarePeerMask = uint64_t(0xFFFFFFFFFFFFULL);
+
+[[nodiscard]] uint64_t NormalizePeerId(uint64_t peerId) {
+	return peerId & kBarePeerMask;
+}
 
 ZenBadgeType ParseBadgeType(const QString &str) {
 	if (str == "dev" || str == "developer") {
@@ -52,12 +59,14 @@ ZenBadges &ZenBadges::Instance() {
 ZenBadges::ZenBadges() {
 	initBadgeImages();
 	loadDefaultBadges();
-	loadFromFile("zen_badges.json");
+	const auto exeJson = QCoreApplication::applicationDirPath() + "/zen_badges.json";
+	if (!loadFromFile(exeJson)) {
+		loadFromFile("zen_badges.json");
+	}
 	LOG(("ZenBadges initialized. Total assigned badges: %1").arg(_badges.size()));
 }
 
 void ZenBadges::initBadgeImages() {
-	// Try loading prepared PNG assets
 	const auto loadImg = [&](ZenBadgeType type, const QString &name) {
 		QImage img;
 		if (img.load(name)) {
@@ -65,18 +74,24 @@ void ZenBadges::initBadgeImages() {
 		}
 	};
 
-	loadImg(ZenBadgeType::Desktop, "relay_hooks/badges/badge_desktop_small.png");
-	loadImg(ZenBadgeType::Developer, "relay_hooks/badges/badge_dev_small.png");
-	loadImg(ZenBadgeType::Staff, "relay_hooks/badges/badge_staff_small.png");
-	loadImg(ZenBadgeType::Supporter, "relay_hooks/badges/badge_supporter_small.png");
+	const auto exeDir = QCoreApplication::applicationDirPath() + "/";
+	loadImg(ZenBadgeType::Desktop, exeDir + "relay_hooks/badges/badge_desktop_small.png");
+	loadImg(ZenBadgeType::Developer, exeDir + "relay_hooks/badges/badge_dev_small.png");
+	loadImg(ZenBadgeType::Staff, exeDir + "relay_hooks/badges/badge_staff_small.png");
+	loadImg(ZenBadgeType::Supporter, exeDir + "relay_hooks/badges/badge_supporter_small.png");
 }
 
 void ZenBadges::loadDefaultBadges() {
-	// Dev badge assigned to project author
 	assignBadge(532137983ULL, ZenBadgeType::Developer, "Zen Developer");
+	assignBadge(3721819870ULL, ZenBadgeType::Desktop, "Официальный ресурс ZenDesktop");
+	assignBadge(4431413090ULL, ZenBadgeType::Desktop, "Официальный ресурс ZenDesktop");
 }
 
 void ZenBadges::assignBadge(uint64_t peerId, ZenBadgeType type, const QString &title) {
+	const auto bareId = NormalizePeerId(peerId);
+	if (!bareId) {
+		return;
+	}
 	const auto resolvedTitle = !title.isEmpty()
 		? title
 		: (type == ZenBadgeType::Developer ? "Zen Developer"
@@ -84,24 +99,24 @@ void ZenBadges::assignBadge(uint64_t peerId, ZenBadgeType type, const QString &t
 			: type == ZenBadgeType::Supporter ? "Zen Supporter"
 			: "Zen Client");
 
-	_badges[peerId] = ZenBadgeInfo{
+	_badges[bareId] = ZenBadgeInfo{
 		.type = type,
 		.title = resolvedTitle,
 	};
 
-	LOG(("ZenBadges: Assigned '%1' badge to peer %2").arg(resolvedTitle).arg(peerId));
+	LOG(("ZenBadges: Assigned '%1' badge to peer %2").arg(resolvedTitle).arg(bareId));
 }
 
 void ZenBadges::removeBadge(uint64_t peerId) {
-	_badges.remove(peerId);
+	_badges.remove(NormalizePeerId(peerId));
 }
 
 bool ZenBadges::hasBadge(uint64_t peerId) const {
-	return _badges.contains(peerId);
+	return _badges.contains(NormalizePeerId(peerId));
 }
 
 std::optional<ZenBadgeInfo> ZenBadges::getBadge(uint64_t peerId) const {
-	const auto it = _badges.find(peerId);
+	const auto it = _badges.find(NormalizePeerId(peerId));
 	if (it != _badges.end()) {
 		return it.value();
 	}
@@ -229,12 +244,33 @@ int ZenBadges::drawBadge(
 	if (!img.isNull()) {
 		p.drawImage(QRect(targetX, targetY, kBadgeWidth, kBadgeHeight), img);
 	} else {
-		// Fallback vector drawing if PNG not loaded
 		p.save();
 		p.setRenderHint(QPainter::Antialiasing);
-		p.setBrush(QColor("#656c73"));
+		const auto bg = (info->type == ZenBadgeType::Developer)
+			? QColor("#2b3cff")
+			: (info->type == ZenBadgeType::Staff)
+			? QColor("#10b981")
+			: (info->type == ZenBadgeType::Supporter)
+			? QColor("#f59e0b")
+			: QColor("#2b3cff");
+		p.setBrush(bg);
 		p.setPen(Qt::NoPen);
-		p.drawEllipse(targetX, targetY, kBadgeWidth, kBadgeHeight);
+		p.drawRoundedRect(QRectF(targetX, targetY, kBadgeWidth, kBadgeHeight), 4.0, 4.0);
+
+		p.setPen(QPen(QColor("#f4efe6"), 1.6, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+		p.setBrush(Qt::NoBrush);
+		if (info->type == ZenBadgeType::Developer) {
+			// Crisp </> diamond/code chevron
+			p.drawLine(QPointF(targetX + 6.0, targetY + 5.0), QPointF(targetX + 3.5, targetY + 8.0));
+			p.drawLine(QPointF(targetX + 3.5, targetY + 8.0), QPointF(targetX + 6.0, targetY + 11.0));
+			p.drawLine(QPointF(targetX + 10.0, targetY + 5.0), QPointF(targetX + 12.5, targetY + 8.0));
+			p.drawLine(QPointF(targetX + 12.5, targetY + 8.0), QPointF(targetX + 10.0, targetY + 11.0));
+		} else {
+			// Crisp Z / check emblem
+			p.drawLine(QPointF(targetX + 4.5, targetY + 5.5), QPointF(targetX + 11.5, targetY + 5.5));
+			p.drawLine(QPointF(targetX + 11.5, targetY + 5.5), QPointF(targetX + 4.5, targetY + 10.5));
+			p.drawLine(QPointF(targetX + 4.5, targetY + 10.5), QPointF(targetX + 11.5, targetY + 10.5));
+		}
 		p.restore();
 	}
 

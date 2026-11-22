@@ -917,7 +917,7 @@ void PaintRow(
 			? tr::lng_my_notes(tr::now)
 			: tr::lng_hidden_author_messages(tr::now);
 		const auto textWidth = st::semiboldFont->width(text);
-		if (!context.search && (flags & Flag::VerifyCodes)) {
+		if (!context.search && ((flags & Flag::VerifyCodes) || ((flags & Flag::SavedMessages) && from))) {
 			paintPeerBadge(textWidth);
 		}
 		if (textWidth > rectForName.width()) {

@@ -16,6 +16,8 @@ jobs:
   build-windows:
     name: Build ZenDesktop (x64 Release)
     runs-on: windows-latest
+    permissions:
+      contents: write
 
     env:
       TBUILD_PATH: D:\TBuild
@@ -71,7 +73,36 @@ jobs:
           echo LibrariesPath=%GITHUB_WORKSPACE%\Libraries\win64>>%GITHUB_ENV%
           echo ThirdPartyPath=%GITHUB_WORKSPACE%\ThirdParty>>%GITHUB_ENV%
 
+      - name: Restore Third-Party Libraries from Release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $releaseTag = "deps-v1"
+          $exists = gh release view $releaseTag --json assets 2>$null
+          if ($LASTEXITCODE -eq 0 -and $exists) {
+              $assets = ($exists | ConvertFrom-Json).assets
+              if ($assets.Count -gt 0) {
+                  Write-Host "Found $releaseTag release with $($assets.Count) parts. Downloading..."
+                  $dlDir = "$env:TEMP\deps_dl"
+                  New-Item -ItemType Directory -Path $dlDir -Force | Out-Null
+                  gh release download $releaseTag --pattern "deps.7z.*" --dir $dlDir
+                  if ($LASTEXITCODE -eq 0) {
+                      Write-Host "Extracting split 7z archive into $env:GITHUB_WORKSPACE..."
+                      & 7z x "$dlDir\deps.7z.001" "-o$env:GITHUB_WORKSPACE" -y
+                      if ($LASTEXITCODE -eq 0) {
+                          "DEPS_FROM_RELEASE=true" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+                          Write-Host "Successfully restored third-party libraries from GitHub Release."
+                      }
+                  }
+                  Remove-Item $dlDir -Recurse -Force -ErrorAction SilentlyContinue
+              }
+          } else {
+              Write-Host "No $releaseTag release found yet; falling back to cache or build."
+          }
+
       - name: Restore Third-Party Libraries Cache
+        if: env.DEPS_FROM_RELEASE != 'true'
         uses: actions/cache/restore@v4
         id: libs-cache
         with:
@@ -83,6 +114,7 @@ jobs:
             ${{ runner.os }}-x64-deps-
 
       - name: Prepare Third-Party Libraries
+        if: env.DEPS_FROM_RELEASE != 'true'
         run: |
           set SKIP_DUMPSYMS=1
           set CARGO_INCREMENTAL=0
@@ -90,7 +122,7 @@ jobs:
           call Telegram\build\prepare\win.bat silent
 
       - name: Purge Intermediate Objects Before Cache
-        if: success() && steps.libs-cache.outputs.cache-hit != 'true'
+        if: success() && env.DEPS_FROM_RELEASE != 'true' && steps.libs-cache.outputs.cache-hit != 'true'
         shell: pwsh
         run: |
           Get-ChildItem -Path "$env:LibrariesPath" -Filter "*.obj" -Recurse -File -ErrorAction SilentlyContinue | Where-Object { $_.FullName -notlike "*\objects-*" } | Remove-Item -Force -ErrorAction SilentlyContinue
@@ -98,14 +130,24 @@ jobs:
           Get-ChildItem -Path "$env:LibrariesPath" -Filter "*.pdb" -Recurse -File -ErrorAction SilentlyContinue | Where-Object { $_.FullName -notlike "*\objects-*" } | Remove-Item -Force -ErrorAction SilentlyContinue
           Write-Host "Intermediate build objects purged to keep cache archive lightweight and fast."
 
-      - name: Save Third-Party Libraries Cache
-        uses: actions/cache/save@v4
-        if: success() && steps.libs-cache.outputs.cache-hit != 'true'
-        with:
-          path: |
-            ${{ env.ThirdPartyPath }}
-            ${{ env.LibrariesPath }}
-          key: ${{ runner.os }}-x64-deps-${{ hashFiles('tdesktop/Telegram/build/prepare/prepare.py') }}
+      - name: Save Third-Party Libraries to Release
+        if: success() && env.DEPS_FROM_RELEASE != 'true'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $outDir = "$env:TEMP\deps_out"
+          New-Item -ItemType Directory -Path $outDir -Force | Out-Null
+          Set-Location $env:GITHUB_WORKSPACE
+          Write-Host "Packing Libraries and ThirdParty into 1.9GB split 7z volumes..."
+          & 7z a -v1900m -mx=1 "$outDir\deps.7z" Libraries ThirdParty
+          if ($LASTEXITCODE -eq 0) {
+              $parts = Get-ChildItem -Path $outDir -Filter "deps.7z.*" | ForEach-Object { $_.FullName }
+              gh release delete deps-v1 -y 2>$null
+              gh release create deps-v1 $parts --title "ZenDesktop Build Dependencies Cache" --notes "Automated split 7z cache for ThirdParty and Libraries (frees 10GB actions/cache for out/)" --prerelease
+              Write-Host "Uploaded $($parts.Count) volumes to release deps-v1."
+          }
+          Remove-Item $outDir -Recurse -Force -ErrorAction SilentlyContinue
 
       - name: Restore Qt RCC Objects
         shell: pwsh
