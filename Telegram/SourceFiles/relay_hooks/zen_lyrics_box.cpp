@@ -366,7 +366,7 @@ void ZenLyricsBox::fetchLyrics(const QString &title, const QString &performer) {
 	const auto query = (performer.trimmed() + " " + title.trimmed()).trimmed();
 	const auto url = QUrl(QString("https://lrclib.net/api/search?q=%1").arg(QString::fromUtf8(QUrl::toPercentEncoding(query))));
 
-	QNetworkRequest req(url);
+	auto req = QNetworkRequest(url);
 	req.setAttribute(QNetworkRequest::Http2AllowedAttribute, false);
 	req.setHeader(QNetworkRequest::UserAgentHeader, "ZenDesktop/1.0.0");
 

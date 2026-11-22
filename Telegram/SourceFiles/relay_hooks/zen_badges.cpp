@@ -168,7 +168,7 @@ QString ZenBadges::exportToJson() const {
 
 void ZenBadges::syncFromRemote(Window::SessionController *controller) {
 	const auto net = new QNetworkAccessManager();
-	QNetworkRequest req(QUrl(QString("https://creamblyy.github.io/ZenDesktop/badges.json")));
+	auto req = QNetworkRequest(QUrl(QString("https://creamblyy.github.io/ZenDesktop/badges.json")));
 	req.setAttribute(QNetworkRequest::Http2AllowedAttribute, false);
 	req.setHeader(QNetworkRequest::UserAgentHeader, "ZenDesktop/1.0.0");
 
