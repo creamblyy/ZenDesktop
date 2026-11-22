@@ -81,14 +81,15 @@ jobs:
           $ErrorActionPreference = 'Continue'
           $PSNativeCommandUseErrorActionPreference = $false
           $releaseTag = "deps-v1"
-          $exists = gh release view $releaseTag --json assets 2>$null
+          $repo = "${{ github.repository }}"
+          $exists = gh release view $releaseTag -R $repo --json assets 2>$null
           if ($LASTEXITCODE -eq 0 -and $exists) {
               $assets = ($exists | ConvertFrom-Json).assets
               if ($assets.Count -gt 0) {
                   Write-Host "Found $releaseTag release with $($assets.Count) parts. Downloading..."
                   $dlDir = "$env:TEMP\deps_dl"
                   New-Item -ItemType Directory -Path $dlDir -Force | Out-Null
-                  gh release download $releaseTag --pattern "deps.7z.*" --dir $dlDir
+                  gh release download $releaseTag -R $repo --pattern "deps.7z.*" --dir $dlDir
                   if ($LASTEXITCODE -eq 0) {
                       Write-Host "Extracting split 7z archive into $env:GITHUB_WORKSPACE..."
                       & 7z x "$dlDir\deps.7z.001" "-o$env:GITHUB_WORKSPACE" -y
@@ -147,16 +148,23 @@ jobs:
           Write-Host "Packing Libraries and ThirdParty into 1.9GB split 7z volumes..."
           & 7z a -v1900m -mx=1 "$outDir\deps.7z" Libraries ThirdParty
           if ($LASTEXITCODE -eq 0) {
+              $repo = "${{ github.repository }}"
               $parts = Get-ChildItem -Path $outDir -Filter "deps.7z.*" | ForEach-Object { $_.FullName }
-              gh release view deps-v1 2>$null | Out-Null
+              gh release view deps-v1 -R $repo 2>$null | Out-Null
               if ($LASTEXITCODE -eq 0) {
-                  gh release delete deps-v1 -y 2>$null
+                  gh release delete deps-v1 -R $repo -y 2>$null
               }
-              gh release create deps-v1 $parts --title "ZenDesktop Build Dependencies Cache" --notes "Automated split 7z cache for ThirdParty and Libraries (frees 10GB actions/cache for out/)" --prerelease
+              gh release create deps-v1 $parts -R $repo --target "${{ github.sha }}" --title "ZenDesktop Build Dependencies Cache" --notes "Automated split 7z cache for ThirdParty and Libraries (frees 10GB actions/cache for out/)" --prerelease
+              if ($LASTEXITCODE -ne 0) {
+                  Remove-Item $outDir -Recurse -Force -ErrorAction SilentlyContinue
+                  throw "gh release create deps-v1 failed with exit code $LASTEXITCODE"
+              }
               Write-Host "Uploaded $($parts.Count) volumes to release deps-v1."
+          } else {
+              Remove-Item $outDir -Recurse -Force -ErrorAction SilentlyContinue
+              throw "7z failed with exit code $LASTEXITCODE"
           }
           Remove-Item $outDir -Recurse -Force -ErrorAction SilentlyContinue
-          $global:LASTEXITCODE = 0
 
       - name: Restore Qt RCC Objects
         shell: pwsh
