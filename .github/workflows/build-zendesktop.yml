@@ -51,6 +51,7 @@ jobs:
         with:
           submodules: recursive
           path: tdesktop
+          fetch-depth: 5
 
       - name: Set up Python 3.10
         uses: actions/setup-python@v5
@@ -136,7 +137,7 @@ jobs:
                           $pluginName = $Matches[1]
                           $pluginCpp = "$env:TEMP\${pluginName}_init.cpp"
                           "#include <QtPlugin>`nQ_IMPORT_PLUGIN($pluginName)" | Set-Content -Path $pluginCpp -Encoding ascii
-                          & cl.exe /nologo /c /MD /I "$qtPrefix\include" /I "$qtPrefix\include\QtCore" $pluginCpp /Fo"$targetObj"
+                          & cl.exe /nologo /c /MD /std:c++17 /Zc:__cplusplus /I "$qtPrefix\include" /I "$qtPrefix\include\QtCore" $pluginCpp /Fo"$targetObj"
                           if ($LASTEXITCODE -ne 0) {
                               Write-Host "Warning: fallback to stub for $pluginName"
                               Copy-Item "$stubObj" -Destination "$targetObj" -Force
@@ -177,6 +178,13 @@ jobs:
               if (Test-Path $fullPath) {
                   (Get-Item $fullPath).LastWriteTime = (Get-Date).AddMinutes(1)
                   Write-Host "Marked modified for recompilation: $file"
+              }
+          }
+          git -C tdesktop diff --name-only HEAD~1 2>$null | ForEach-Object {
+              $fullPath = "tdesktop\$_"
+              if (Test-Path $fullPath) {
+                  (Get-Item $fullPath).LastWriteTime = (Get-Date).AddMinutes(1)
+                  Write-Host "Marked commit diff for recompilation: $_"
               }
           }
 

@@ -14,6 +14,7 @@ extern "C" {
 #if defined(_WIN32)
 #include <QtPlugin>
 Q_IMPORT_PLUGIN(QWindowsIntegrationPlugin)
+Q_IMPORT_PLUGIN(QWebpPlugin)
 #endif
 
 int main(int argc, char *argv[]) {
