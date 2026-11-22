@@ -153,6 +153,33 @@ jobs:
           $global:LASTEXITCODE = 0
           Write-Host "Qt resource and plugin objects verification complete."
 
+      - name: Restore Build Output Cache
+        uses: actions/cache/restore@v4
+        id: build-cache
+        with:
+          path: tdesktop/out
+          key: ${{ runner.os }}-x64-out-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-x64-out-
+
+      - name: Synchronize Timestamps for Incremental Build
+        if: steps.build-cache.outputs.cache-hit == 'true' || steps.build-cache.outputs.cache-matched-key != ''
+        shell: pwsh
+        run: |
+          Write-Host "Updating timestamps of cached objects for fast incremental build..."
+          $now = Get-Date
+          Get-ChildItem -Path "tdesktop\out" -Filter "*.obj" -Recurse -File -ErrorAction SilentlyContinue | ForEach-Object {
+              $_.LastWriteTime = $now
+          }
+          git -C tdesktop status --porcelain | ForEach-Object {
+              $file = $_.Substring(3).Trim()
+              $fullPath = "tdesktop\$file"
+              if (Test-Path $fullPath) {
+                  (Get-Item $fullPath).LastWriteTime = (Get-Date).AddMinutes(1)
+                  Write-Host "Marked modified for recompilation: $file"
+              }
+          }
+
       - name: Configure CMake for ZenDesktop
         run: |
           cd %GITHUB_WORKSPACE%\tdesktop\Telegram
@@ -194,3 +221,17 @@ jobs:
           name: ZenDesktop-Windows-x64
           path: artifact/
           retention-days: 14
+
+      - name: Clean Heavy PDBs Before Cache Save
+        if: success()
+        shell: pwsh
+        run: |
+          Get-ChildItem -Path "$env:GITHUB_WORKSPACE\tdesktop\out" -Filter "*.pdb" -Recurse -File -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
+          Write-Host "Cleaned PDB files to keep build cache archive compact."
+
+      - name: Save Build Output Cache
+        uses: actions/cache/save@v4
+        if: success()
+        with:
+          path: tdesktop/out
+          key: ${{ runner.os }}-x64-out-${{ github.sha }}
