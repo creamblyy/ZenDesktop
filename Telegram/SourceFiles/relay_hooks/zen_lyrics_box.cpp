@@ -6,6 +6,7 @@ This file is part of Telegram Desktop fork - ZenDesktop with RelayHooks.
 #include "media/player/media_player_instance.h"
 #include "data/data_document.h"
 #include "data/data_document_media.h"
+#include "data/data_file_origin.h"
 #include "data/data_session.h"
 #include "window/window_session_controller.h"
 #include "core/application.h"
