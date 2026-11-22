@@ -136,13 +136,24 @@ jobs:
                       if ($targetObj -match '([a-zA-Z0-9]+)_init\.cpp\.obj$') {
                           $pluginName = $Matches[1]
                           $pluginCpp = "$env:TEMP\${pluginName}_init.cpp"
-                          "#include <QtPlugin>`nQ_IMPORT_PLUGIN($pluginName)" | Set-Content -Path $pluginCpp -Encoding ascii
-                          & cl.exe /nologo /c /MD /std:c++17 /Zc:__cplusplus /I "$qtPrefix\include" /I "$qtPrefix\include\QtCore" $pluginCpp /Fo"$targetObj"
-                          if ($LASTEXITCODE -ne 0) {
-                              Write-Host "Warning: fallback to stub for $pluginName"
-                              Copy-Item "$stubObj" -Destination "$targetObj" -Force
+                          if ($pluginName -match '^Q[A-Z]') {
+                              "#include <QtPlugin>`nQ_IMPORT_PLUGIN($pluginName)" | Set-Content -Path $pluginCpp -Encoding ascii
+                              & cl.exe /nologo /c /MD /std:c++17 /Zc:__cplusplus /I "$qtPrefix\include" /I "$qtPrefix\include\QtCore" $pluginCpp /Fo"$targetObj"
+                              if ($LASTEXITCODE -ne 0) {
+                                  Write-Host "Warning: fallback to stub for plugin $pluginName"
+                                  Copy-Item "$stubObj" -Destination "$targetObj" -Force
+                              } else {
+                                  Write-Host "Compiled real plugin initializer: $pluginName -> $targetObj"
+                              }
                           } else {
-                              Write-Host "Compiled real plugin initializer: $pluginName -> $targetObj"
+                              "extern int qInitResources_${pluginName}();`nnamespace { struct RsrcInit { RsrcInit() { qInitResources_${pluginName}(); } }; static const RsrcInit init; }" | Set-Content -Path $pluginCpp -Encoding ascii
+                              & cl.exe /nologo /c /MD /std:c++17 /Zc:__cplusplus $pluginCpp /Fo"$targetObj"
+                              if ($LASTEXITCODE -ne 0) {
+                                  Write-Host "Warning: fallback to stub for resource $pluginName"
+                                  Copy-Item "$stubObj" -Destination "$targetObj" -Force
+                              } else {
+                                  Write-Host "Compiled real resource initializer: $pluginName -> $targetObj"
+                              }
                           }
                       } else {
                           Copy-Item "$stubObj" -Destination "$targetObj" -Force

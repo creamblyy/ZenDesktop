@@ -15,9 +15,18 @@ extern "C" {
 #include <QtPlugin>
 Q_IMPORT_PLUGIN(QWindowsIntegrationPlugin)
 Q_IMPORT_PLUGIN(QWebpPlugin)
+
+extern int qInitResources_shaders();
+extern int qInitResources_openglblacklists();
+extern int qInitResources_cursors();
 #endif
 
 int main(int argc, char *argv[]) {
+#if defined(_WIN32)
+	qInitResources_shaders();
+	qInitResources_openglblacklists();
+	qInitResources_cursors();
+#endif
 	// OpenSSL's own atexit handler runs OPENSSL_cleanup() on the main thread
 	// and frees the library globals while detached background tasks can still
 	// be inside OpenSSL, so an ordinary quit can fault on a worker thread.
