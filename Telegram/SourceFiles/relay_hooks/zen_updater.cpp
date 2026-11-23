@@ -246,7 +246,7 @@ void ZenUpdater::showUpdateModal(const ZenUpdateInfo &info) {
 			const auto pillText = QString("v%1  →  v%2")
 				.arg(kZenVersion)
 				.arg(info.version);
-			const auto subFont = st::defaultFlatLabel.style.font->semibold();
+			const auto subFont = st::semiboldFont;
 			const auto textW = subFont->width(pillText);
 			const QRectF pillRect(82.0, 48.0, textW + 20.0, 22.0);
 			p.setBrush(QColor(255, 255, 255, 44));
@@ -413,7 +413,7 @@ void ZenUpdater::showUpdateModal(const ZenUpdateInfo &info) {
 						statusLabel->setTextColorOverride(QColor(235, 87, 87));
 						statusLabel->setText(QString::fromUtf8("Ошибка загрузки: %1").arg(reply->errorString()));
 						weakBox->clearButtons();
-						weakBox->addButton(QString::fromUtf8("Повторить"), [=] { (*startBoxDownload)(); });
+						weakBox->addButton(rpl::single(QString::fromUtf8("Повторить")), [=] { (*startBoxDownload)(); });
 						weakBox->addButton(tr::lng_close(), [=] { weakBox->closeBox(); });
 					}
 					return;
@@ -443,8 +443,8 @@ void ZenUpdater::showUpdateModal(const ZenUpdateInfo &info) {
 			});
 		};
 
-		box->addButton(QString::fromUtf8("Обновить"), [=] { (*startBoxDownload)(); });
-		box->addButton(QString::fromUtf8("Позже"), [=] { box->closeBox(); });
+		box->addButton(rpl::single(QString::fromUtf8("Обновить")), [=] { (*startBoxDownload)(); });
+		box->addButton(rpl::single(QString::fromUtf8("Позже")), [=] { box->closeBox(); });
 	}));
 }
 
