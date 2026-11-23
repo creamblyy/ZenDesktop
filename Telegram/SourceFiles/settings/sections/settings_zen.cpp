@@ -8,6 +8,7 @@ This file is part of Telegram Desktop fork - ZenDesktop with RelayHooks.
 #include "relay_hooks/relay_hooks.h"
 #include "relay_hooks/zen_updater.h"
 #include "relay_hooks/zen_badges.h"
+#include "relay_hooks/zen_ws_proxy.h"
 #include "core/version.h"
 #include "core/file_utilities.h"
 #include "ui/vertical_list.h"
@@ -499,13 +500,23 @@ void ZenNetwork::setupContent() {
 
 	const auto wsProxyToggle = AddToggle(
 		content,
-		rpl::single(QString::fromUtf8("Поддержка WebSocket прокси (tg-ws-proxy)")),
-		rpl::single(true),
+		rpl::single(QString::fromUtf8("Встроенный WebSocket прокси (tg-ws-proxy)")),
+		rpl::single(hooks.isWsProxyEnabled()),
 		&st::menuIconLink);
+
+	Ui::AddDividerText(
+		content,
+		rpl::single(QString::fromUtf8("Локальный MTProto-прокси (127.0.0.1:1443) внутри клиента. Туннелирует трафик через WebSocket на kws*.web.telegram.org без сторонних программ.")));
 
 	boostToggle->toggledChanges(
 	) | rpl::on_next([=](bool checked) {
 		Relay::RelayHooks::Instance().setDownloadBoostEnabled(checked);
+	}, lifetime);
+
+	wsProxyToggle->toggledChanges(
+	) | rpl::on_next([=](bool checked) {
+		Relay::RelayHooks::Instance().setWsProxyEnabled(checked);
+		Relay::ZenWsProxy::Instance().applyEnabled(checked);
 	}, lifetime);
 
 	Ui::ResizeFitChild(this, content);

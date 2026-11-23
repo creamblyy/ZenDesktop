@@ -7,6 +7,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "core/application.h"
 #include "relay_hooks/relay_hooks.h"
+#include "relay_hooks/zen_ws_proxy.h"
 
 #include <QtCore/QTimer>
 #include <QtCore/QPointer>
@@ -453,6 +454,9 @@ void Application::run() {
 	DEBUG_LOG(("Application Info: window created..."));
 
 	startDomain();
+	if (Relay::RelayHooks::Instance().isWsProxyEnabled()) {
+		Relay::ZenWsProxy::Instance().applyEnabled(true);
+	}
 	startTray();
 
 	_lastActivePrimaryWindow->firstShow();

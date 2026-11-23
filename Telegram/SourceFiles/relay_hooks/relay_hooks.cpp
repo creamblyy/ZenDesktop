@@ -249,6 +249,16 @@ void RelayHooks::setDownloadBoostEnabled(bool enabled) {
 	LOG(("RelayHooks: Download boost set to %1").arg(enabled ? "true" : "false"));
 }
 
+bool RelayHooks::isWsProxyEnabled() const {
+	return _wsProxy;
+}
+
+void RelayHooks::setWsProxyEnabled(bool enabled) {
+	_wsProxy = enabled;
+	saveSettings();
+	LOG(("RelayHooks: WS proxy set to %1").arg(enabled ? "true" : "false"));
+}
+
 AutoUpdateMode RelayHooks::autoUpdateMode() const {
 	return _autoUpdateMode;
 }
@@ -292,6 +302,7 @@ void RelayHooks::loadSettings() {
 	_smoothScroll = s.value("smooth_scroll", true).toBool();
 	_material3Icons = s.value("material3_icons", true).toBool();
 	_downloadBoost = s.value("download_boost", true).toBool();
+	_wsProxy = s.value("ws_proxy", false).toBool();
 	_autoUpdateMode = static_cast<AutoUpdateMode>(s.value("auto_update_mode", 0).toInt());
 }
 
@@ -317,6 +328,7 @@ void RelayHooks::saveSettings() {
 	s.setValue("smooth_scroll", _smoothScroll);
 	s.setValue("material3_icons", _material3Icons);
 	s.setValue("download_boost", _downloadBoost);
+	s.setValue("ws_proxy", _wsProxy);
 	s.setValue("auto_update_mode", static_cast<int>(_autoUpdateMode));
 }
 
@@ -337,6 +349,7 @@ bool RelayHooks::exportSettings(const QString &filePath) const {
 	root["smooth_scroll"] = _smoothScroll;
 	root["material3_icons"] = _material3Icons;
 	root["download_boost"] = _downloadBoost;
+	root["ws_proxy"] = _wsProxy;
 	root["auto_update_mode"] = static_cast<int>(_autoUpdateMode);
 
 	QFile file(filePath);
@@ -373,6 +386,7 @@ bool RelayHooks::importSettings(const QString &filePath) {
 	if (obj.contains("smooth_scroll")) _smoothScroll = obj["smooth_scroll"].toBool();
 	if (obj.contains("material3_icons")) _material3Icons = obj["material3_icons"].toBool();
 	if (obj.contains("download_boost")) _downloadBoost = obj["download_boost"].toBool();
+	if (obj.contains("ws_proxy")) _wsProxy = obj["ws_proxy"].toBool();
 	if (obj.contains("auto_update_mode")) _autoUpdateMode = static_cast<AutoUpdateMode>(obj["auto_update_mode"].toInt());
 
 	saveSettings();
@@ -395,6 +409,7 @@ void RelayHooks::resetSettings() {
 	_smoothScroll = true;
 	_material3Icons = true;
 	_downloadBoost = true;
+	_wsProxy = false;
 	_autoUpdateMode = AutoUpdateMode::DownloadOnly;
 	saveSettings();
 	LOG(("RelayHooks: Settings reset to defaults."));

@@ -110,6 +110,9 @@ public:
 	[[nodiscard]] bool isDownloadBoostEnabled() const;
 	void setDownloadBoostEnabled(bool enabled);
 
+	[[nodiscard]] bool isWsProxyEnabled() const;
+	void setWsProxyEnabled(bool enabled);
+
 	// Updates & Backup
 	[[nodiscard]] AutoUpdateMode autoUpdateMode() const;
 	void setAutoUpdateMode(AutoUpdateMode mode);
@@ -166,6 +169,7 @@ private:
 	bool _smoothScroll = true;
 	bool _material3Icons = true;
 	bool _downloadBoost = true; // Boost enabled by default
+	bool _wsProxy = false;
 	AutoUpdateMode _autoUpdateMode = AutoUpdateMode::DownloadOnly;
 
 	std::unordered_set<uint64_t> _deletedMessages;
