@@ -1,5 +1,6 @@
 /*
 This file is part of Telegram Desktop fork - ZenDesktop with RelayHooks.
+Built-in MTProto-over-WSS proxy (tg-ws-proxy).
 */
 #pragma once
 
