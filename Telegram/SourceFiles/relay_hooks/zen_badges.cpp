@@ -2,6 +2,7 @@
 This file is part of Telegram Desktop fork - ZenDesktop with RelayHooks.
 */
 #include "relay_hooks/zen_badges.h"
+#include "relay_hooks/zen_badges_data.h"
 #include "logs.h"
 #include "window/window_session_controller.h"
 #include "ui/boxes/confirm_box.h"
@@ -67,6 +68,20 @@ ZenBadges::ZenBadges() {
 }
 
 void ZenBadges::initBadgeImages() {
+	const auto loadEmbedded = [&](
+			ZenBadgeType type,
+			const unsigned char *data,
+			int size) {
+		QImage img;
+		if (img.loadFromData(data, size, "PNG")) {
+			_badgeImages[type] = img;
+		}
+	};
+	loadEmbedded(ZenBadgeType::Desktop, kBadgeDesktopPng, int(sizeof(kBadgeDesktopPng)));
+	loadEmbedded(ZenBadgeType::Developer, kBadgeDevPng, int(sizeof(kBadgeDevPng)));
+	loadEmbedded(ZenBadgeType::Staff, kBadgeStaffPng, int(sizeof(kBadgeStaffPng)));
+	loadEmbedded(ZenBadgeType::Supporter, kBadgeSupporterPng, int(sizeof(kBadgeSupporterPng)));
+
 	const auto loadImg = [&](ZenBadgeType type, const QString &name) {
 		QImage img;
 		if (img.load(name)) {
@@ -242,7 +257,11 @@ int ZenBadges::drawBadge(
 	const auto targetY = rectForName.y() + (rectForName.height() - kBadgeHeight) / 2;
 
 	if (!img.isNull()) {
+		p.save();
+		p.setRenderHint(QPainter::Antialiasing);
+		p.setRenderHint(QPainter::SmoothPixmapTransform);
 		p.drawImage(QRect(targetX, targetY, kBadgeWidth, kBadgeHeight), img);
+		p.restore();
 	} else {
 		p.save();
 		p.setRenderHint(QPainter::Antialiasing);

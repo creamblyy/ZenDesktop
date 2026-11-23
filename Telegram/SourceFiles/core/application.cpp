@@ -11,6 +11,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include <QtCore/QTimer>
 #include <QtCore/QPointer>
 #include <QtGui/QWheelEvent>
+#include <QtWidgets/QAbstractScrollArea>
+#include <QtWidgets/QScrollBar>
 
 #include "data/data_abstract_structure.h"
 #include "data/data_channel.h"
@@ -750,78 +752,92 @@ bool Application::eventFilter(QObject *object, QEvent *e) {
 		}
 	} break;
 	case QEvent::MouseButtonPress:
-	case QEvent::TouchBegin:
+	case QEvent::TouchBegin: {
+		updateNonIdle();
+	} break;
 	case QEvent::Wheel: {
 		updateNonIdle();
 		if (Relay::RelayHooks::Instance().isSmoothScrollEnabled()
 			&& object
 			&& object->isWidgetType()) {
 			const auto ev = static_cast<QWheelEvent*>(e);
-			static auto Synthesizing = false;
-			if (!Synthesizing
-				&& ev->source() == Qt::MouseEventNotSynthesized
+			if (ev->source() == Qt::MouseEventNotSynthesized
 				&& ev->modifiers() == Qt::NoModifier
 				&& ev->pixelDelta().isNull()
 				&& ev->angleDelta().y() != 0) {
-				struct SmoothScrollState {
-					QPointer<QWidget> target;
-					QPointF localPos;
-					QPointF globalPos;
-					double remaining = 0.0;
-					QTimer timer;
-				};
-				static SmoothScrollState State;
-				static const auto Init = [&] {
-					State.timer.setInterval(10);
-					QObject::connect(&State.timer, &QTimer::timeout, [] {
-						if (!State.target || std::abs(State.remaining) < 0.5) {
-							State.remaining = 0.0;
-							State.timer.stop();
-							return;
+				const auto dy = ev->angleDelta().y();
+				QAbstractScrollArea *scrollArea = nullptr;
+				for (auto w = static_cast<QWidget*>(object); w; w = w->parentWidget()) {
+					if (const auto area = qobject_cast<QAbstractScrollArea*>(w)) {
+						if (const auto bar = area->verticalScrollBar()) {
+							if (bar->maximum() > bar->minimum()
+								&& ((dy > 0 && bar->value() > bar->minimum())
+									|| (dy < 0 && bar->value() < bar->maximum()))) {
+								scrollArea = area;
+								break;
+							}
 						}
-						auto step = State.remaining * 0.22;
-						if (std::abs(step) < 1.0) {
-							step = (State.remaining > 0)
-								? std::min(1.0, State.remaining)
-								: std::max(-1.0, State.remaining);
-						}
-						const auto pixelStep = int(std::round(step));
-						if (pixelStep == 0) {
-							State.remaining = 0.0;
-							State.timer.stop();
-							return;
-						}
-						State.remaining -= pixelStep;
-						QWheelEvent synth(
-							State.localPos,
-							State.globalPos,
-							QPoint(0, pixelStep),
-							QPoint(0, pixelStep),
-							Qt::NoButton,
-							Qt::NoModifier,
-							Qt::ScrollUpdate,
-							false,
-							Qt::MouseEventSynthesizedByApplication);
-						Synthesizing = true;
-						QCoreApplication::sendEvent(State.target.data(), &synth);
-						Synthesizing = false;
-					});
-					return true;
-				}();
-				(void)Init;
+					}
+				}
+				if (scrollArea) {
+					struct SmoothScrollState {
+						QPointer<QAbstractScrollArea> area;
+						double remaining = 0.0;
+						QTimer timer;
+					};
+					static SmoothScrollState State;
+					static const auto Init = [&] {
+						State.timer.setInterval(10);
+						QObject::connect(&State.timer, &QTimer::timeout, [] {
+							if (!State.area || std::abs(State.remaining) < 0.5) {
+								State.remaining = 0.0;
+								State.timer.stop();
+								return;
+							}
+							const auto bar = State.area->verticalScrollBar();
+							if (!bar || bar->maximum() <= bar->minimum()) {
+								State.remaining = 0.0;
+								State.timer.stop();
+								return;
+							}
+							auto step = State.remaining * 0.22;
+							if (std::abs(step) < 1.0) {
+								step = (State.remaining > 0)
+									? std::min(1.0, State.remaining)
+									: std::max(-1.0, State.remaining);
+							}
+							const auto pixelStep = int(std::round(step));
+							if (pixelStep == 0) {
+								State.remaining = 0.0;
+								State.timer.stop();
+								return;
+							}
+							const auto nextVal = std::clamp(
+								bar->value() - pixelStep,
+								bar->minimum(),
+								bar->maximum());
+							if (nextVal == bar->value()) {
+								State.remaining = 0.0;
+								State.timer.stop();
+								return;
+							}
+							bar->setValue(nextVal);
+							State.remaining -= pixelStep;
+						});
+						return true;
+					}();
+					(void)Init;
 
-				const auto widget = static_cast<QWidget*>(object);
-				if (State.target != widget) {
-					State.remaining = 0.0;
-					State.target = widget;
+					if (State.area != scrollArea) {
+						State.remaining = 0.0;
+						State.area = scrollArea;
+					}
+					State.remaining += dy * 0.85;
+					if (!State.timer.isActive()) {
+						State.timer.start();
+					}
+					return true;
 				}
-				State.localPos = ev->position();
-				State.globalPos = ev->globalPosition();
-				State.remaining += ev->angleDelta().y() * 0.9;
-				if (!State.timer.isActive()) {
-					State.timer.start();
-				}
-				return true;
 			}
 		}
 	} break;
