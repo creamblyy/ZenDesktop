@@ -825,39 +825,40 @@ void Main::setupContent() {
 				auto p = QPainter(btn);
 				p.setRenderHint(QPainter::Antialiasing);
 				constexpr auto kMarginX = 12.0;
-				constexpr auto kRadius = 16.0;
+				constexpr auto kOuterR = 16.0;
+				constexpr auto kInnerR = 4.0;
 				const auto w = double(btn->width());
 				const auto h = double(btn->height());
-				if (w <= 2.0 * kMarginX || h <= 0.0) {
+				if (w <= 2.0 * kMarginX || h <= 4.0) {
 					return;
 				}
-				const auto topPad = isFirst ? 0.0 : kRadius;
-				const auto bottomPad = isLast ? 0.0 : kRadius;
-				QPainterPath rounded;
-				rounded.addRoundedRect(
-					QRectF(kMarginX, -topPad, w - 2.0 * kMarginX, h + topPad + bottomPad),
-					kRadius,
-					kRadius);
+				const auto x1 = kMarginX;
+				const auto x2 = w - kMarginX;
+				const auto y1 = isFirst ? 0.0 : 1.0;
+				const auto y2 = isLast ? h : (h - 1.0);
+				const auto rt = isFirst ? kOuterR : kInnerR;
+				const auto rb = isLast ? kOuterR : kInnerR;
+
+				QPainterPath cardPath;
+				cardPath.moveTo(x1 + rt, y1);
+				cardPath.lineTo(x2 - rt, y1);
+				cardPath.arcTo(QRectF(x2 - 2.0 * rt, y1, 2.0 * rt, 2.0 * rt), 90.0, -90.0);
+				cardPath.lineTo(x2, y2 - rb);
+				cardPath.arcTo(QRectF(x2 - 2.0 * rb, y2 - 2.0 * rb, 2.0 * rb, 2.0 * rb), 0.0, -90.0);
+				cardPath.lineTo(x1 + rb, y2);
+				cardPath.arcTo(QRectF(x1, y2 - 2.0 * rb, 2.0 * rb, 2.0 * rb), 270.0, -90.0);
+				cardPath.lineTo(x1, y1 + rt);
+				cardPath.arcTo(QRectF(x1, y1, 2.0 * rt, 2.0 * rt), 180.0, -90.0);
+				cardPath.closeSubpath();
+
 				QPainterPath full;
 				full.addRect(QRectF(0.0, 0.0, w, h));
-				const auto cardPath = rounded.intersected(full);
 				const auto maskPath = full.subtracted(cardPath);
 
 				auto tint = st::windowFg->c;
 				tint.setAlphaF(0.05);
 				p.fillPath(cardPath, tint);
 				p.fillPath(maskPath, st::windowBg->c);
-
-				if (!isLast) {
-					auto divider = st::windowFg->c;
-					divider.setAlphaF(0.07);
-					p.fillRect(
-						int(kMarginX) + 16,
-						btn->height() - 1,
-						btn->width() - 2 * int(kMarginX) - 32,
-						1,
-						divider);
-				}
 			}, btn->lifetime());
 		}
 	}
