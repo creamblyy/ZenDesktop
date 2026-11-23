@@ -87,6 +87,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "window/notifications_manager.h"
 #include "window/themes/window_theme.h"
 #include "ui/widgets/tooltip.h"
+#include "ui/widgets/elastic_scroll.h"
 #include "ui/widgets/scroll_area.h"
 #include "ui/gl/gl_detection.h"
 #include "ui/text/text_options.h"
@@ -163,6 +164,7 @@ base::options::toggle OptionSkipUrlSchemeRegister({
 });
 
 struct GlobalSmoothScrollState {
+	QPointer<Ui::ElasticScroll> elasticArea;
 	QPointer<Ui::ScrollArea> uiArea;
 	QPointer<QAbstractScrollArea> qtArea;
 	double remaining = 0.0;
@@ -173,6 +175,7 @@ struct GlobalSmoothScrollState {
 void ResetSmoothScroll(GlobalSmoothScrollState &state) {
 	state.remaining = 0.0;
 	state.lastSetTop = -1;
+	state.elasticArea = nullptr;
 	state.uiArea = nullptr;
 	state.qtArea = nullptr;
 	if (state.timer.isActive()) {
@@ -187,6 +190,12 @@ void ResetSmoothScroll(GlobalSmoothScrollState &state) {
 		state.timer.setInterval(8);
 		QObject::connect(&state.timer, &QTimer::timeout, [] {
 			auto readRange = [&](int &cur, int &minV, int &maxV) -> bool {
+				if (state.elasticArea) {
+					cur = state.elasticArea->scrollTop();
+					minV = 0;
+					maxV = state.elasticArea->scrollTopMax();
+					return true;
+				}
 				if (state.uiArea) {
 					cur = state.uiArea->scrollTop();
 					minV = 0;
@@ -234,7 +243,9 @@ void ResetSmoothScroll(GlobalSmoothScrollState &state) {
 				return;
 			}
 
-			if (state.uiArea) {
+			if (state.elasticArea) {
+				state.elasticArea->scrollToY(nextVal);
+			} else if (state.uiArea) {
 				state.uiArea->scrollToY(nextVal);
 			} else if (state.qtArea) {
 				if (const auto bar = state.qtArea->verticalScrollBar()) {
@@ -871,12 +882,23 @@ bool Application::eventFilter(QObject *object, QEvent *e) {
 				&& !hasTouchpadPixels
 				&& dy != 0
 				&& std::abs(dy) >= std::abs(dx)) {
+				Ui::ElasticScroll *foundElasticArea = nullptr;
 				Ui::ScrollArea *foundUiArea = nullptr;
 				QAbstractScrollArea *foundQtArea = nullptr;
 				auto curTop = 0;
 				const auto startWidget = static_cast<QWidget*>(object);
 				for (auto w = startWidget; w; w = w->parentWidget()) {
-					if (const auto area = dynamic_cast<Ui::ScrollArea*>(w)) {
+					if (const auto area = dynamic_cast<Ui::ElasticScroll*>(w)) {
+						const auto maxTop = area->scrollTopMax();
+						const auto top = area->scrollTop();
+						if (maxTop > 0
+							&& ((dy > 0 && top > 0)
+								|| (dy < 0 && top < maxTop))) {
+							foundElasticArea = area;
+							curTop = top;
+							break;
+						}
+					} else if (const auto area = dynamic_cast<Ui::ScrollArea*>(w)) {
 						const auto maxTop = area->scrollTopMax();
 						const auto top = area->scrollTop();
 						if (maxTop > 0
@@ -901,11 +923,13 @@ bool Application::eventFilter(QObject *object, QEvent *e) {
 						break;
 					}
 				}
-				if (foundUiArea || foundQtArea) {
+				if (foundElasticArea || foundUiArea || foundQtArea) {
 					auto &state = SmoothScrollState();
-					if (state.uiArea.data() != foundUiArea
+					if (state.elasticArea.data() != foundElasticArea
+						|| state.uiArea.data() != foundUiArea
 						|| state.qtArea.data() != foundQtArea) {
 						state.remaining = 0.0;
+						state.elasticArea = foundElasticArea;
 						state.uiArea = foundUiArea;
 						state.qtArea = foundQtArea;
 						state.lastSetTop = curTop;

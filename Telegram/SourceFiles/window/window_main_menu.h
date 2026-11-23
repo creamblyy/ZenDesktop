@@ -92,6 +92,7 @@ private:
 		not_null<QEvent*> e);
 
 	void drawName(Painter &p);
+	void prepareSiteRevealAnimation();
 	void startSiteRevealAnimation();
 	void updateSiteRevealAnimation(float64 progress);
 	void finishSiteRevealAnimation();
@@ -101,6 +102,7 @@ private:
 		QPointer<QGraphicsOpacityEffect> effect;
 		int baseY = 0;
 		int delayMs = 0;
+		bool hasShift = false;
 	};
 
 	const not_null<SessionController*> _controller;
@@ -130,6 +132,7 @@ private:
 	std::vector<RevealItem> _revealItems;
 	Ui::Animations::Simple _revealAnimation;
 	int _revealTotalMs = 0;
+	bool _revealPrepared = false;
 
 	rpl::variable<bool> _showFinished = false;
 	bool _insideEventRedirect = false;

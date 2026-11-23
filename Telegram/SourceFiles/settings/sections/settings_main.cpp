@@ -105,6 +105,45 @@ using namespace Builder;
 
 constexpr auto kSugValidatePhone = "VALIDATE_PHONE_NUMBER"_cs;
 
+void AddInsetDivider(
+		SectionBuilder &builder,
+		int leftMargin = 60,
+		rpl::producer<bool> shown = nullptr) {
+	auto makeLine = [=](not_null<Ui::RpWidget*> parent) {
+		auto line = object_ptr<Ui::FixedHeightWidget>(parent, 1);
+		const auto raw = line.data();
+		raw->paintRequest() | rpl::on_next([=] {
+			auto p = QPainter(raw);
+			auto c = st::windowFg->c;
+			c.setAlphaF(0.08);
+			const auto w = std::max(0, raw->width() - leftMargin - 16);
+			if (w > 0) {
+				p.fillRect(leftMargin, 0, w, 1, c);
+			}
+		}, raw->lifetime());
+		return line;
+	};
+	if (!shown) {
+		builder.add([=](const WidgetContext &ctx) {
+			return SectionBuilder::WidgetToAdd{
+				.widget = makeLine(ctx.container),
+			};
+		});
+		return;
+	}
+	auto sharedShown = std::make_shared<rpl::producer<bool>>(std::move(shown));
+	builder.add([=](const WidgetContext &ctx) {
+		auto wrap = object_ptr<Ui::SlideWrap<Ui::FixedHeightWidget>>(
+			ctx.container,
+			makeLine(ctx.container));
+		wrap->toggleOn(std::move(*sharedShown));
+		wrap->finishAnimating();
+		return SectionBuilder::WidgetToAdd{
+			.widget = std::move(wrap),
+		};
+	});
+}
+
 class Cover final : public Ui::FixedHeightWidget {
 public:
 	Cover(
@@ -376,7 +415,9 @@ void BuildSectionButtons(SectionBuilder &builder) {
 		.keywords = { u"zen"_q, u"zendesktop"_q, u"relay"_q, u"hooks"_q, u"ghost"_q, u"anti-recall"_q },
 	});
 
-	builder.addSkip(12);
+	builder.addSkip(6);
+	AddInsetDivider(builder);
+	builder.addSkip(6);
 
 	if (!session->supportMode()) {
 		builder.addButton({
@@ -388,6 +429,7 @@ void BuildSectionButtons(SectionBuilder &builder) {
 			},
 			.keywords = { u"profile"_q, u"edit"_q, u"information"_q },
 		});
+		AddInsetDivider(builder);
 	}
 
 	builder.addSectionButton({
@@ -396,6 +438,7 @@ void BuildSectionButtons(SectionBuilder &builder) {
 		.icon = { &st::menuIconNotifications },
 		.keywords = { u"alerts"_q, u"sounds"_q, u"badge"_q },
 	});
+	AddInsetDivider(builder);
 
 	builder.addSectionButton({
 		.title = tr::lng_settings_section_privacy(),
@@ -403,6 +446,7 @@ void BuildSectionButtons(SectionBuilder &builder) {
 		.icon = { &st::menuIconLock },
 		.keywords = { u"security"_q, u"passcode"_q, u"password"_q, u"2fa"_q },
 	});
+	AddInsetDivider(builder);
 
 	builder.addSectionButton({
 		.title = tr::lng_settings_section_chat_settings(),
@@ -436,6 +480,7 @@ void BuildSectionButtons(SectionBuilder &builder) {
 			preload();
 		}
 
+		AddInsetDivider(builder, 60, rpl::duplicate(shownProducer));
 		builder.addButton({
 			.title = tr::lng_settings_section_filters(),
 			.icon = { &st::menuIconShowInFolder },
@@ -444,6 +489,7 @@ void BuildSectionButtons(SectionBuilder &builder) {
 			.shown = std::move(shownProducer),
 		});
 	}
+	AddInsetDivider(builder);
 
 	builder.addSectionButton({
 		.title = tr::lng_settings_advanced(),
@@ -451,6 +497,7 @@ void BuildSectionButtons(SectionBuilder &builder) {
 		.icon = { &st::menuIconManage },
 		.keywords = { u"performance"_q, u"proxy"_q, u"experimental"_q },
 	});
+	AddInsetDivider(builder);
 
 	builder.addSectionButton({
 		.title = tr::lng_settings_section_devices(),
@@ -458,6 +505,7 @@ void BuildSectionButtons(SectionBuilder &builder) {
 		.icon = { &st::menuIconUnmute },
 		.keywords = { u"sessions"_q, u"calls"_q },
 	});
+	AddInsetDivider(builder);
 
 	builder.addButton({
 		.id = u"main/power"_q,
@@ -468,6 +516,7 @@ void BuildSectionButtons(SectionBuilder &builder) {
 		},
 		.keywords = { u"battery"_q, u"animations"_q, u"power"_q, u"saving"_q },
 	});
+	AddInsetDivider(builder);
 
 	builder.addButton({
 		.id = u"main/language"_q,

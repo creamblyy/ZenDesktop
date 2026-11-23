@@ -499,6 +499,9 @@ MainMenu::MainMenu(
 	}
 
 	setupSwipe();
+	if (Relay::RelayHooks::Instance().isSwissMotionEnabled()) {
+		prepareSiteRevealAnimation();
+	}
 }
 
 MainMenu::~MainMenu() {
@@ -691,13 +694,40 @@ void MainMenu::showFinished() {
 	}
 }
 
-void MainMenu::startSiteRevealAnimation() {
+void MainMenu::prepareSiteRevealAnimation() {
 	finishSiteRevealAnimation();
+
+	auto addHiddenTarget = [&](QWidget *w) {
+		if (!w || w->isHidden()) {
+			return;
+		}
+		auto *effect = new QGraphicsOpacityEffect(w);
+		effect->setOpacity(0.0);
+		w->setGraphicsEffect(effect);
+		_revealItems.push_back(RevealItem{
+			.widget = w,
+			.effect = effect,
+			.baseY = w->y(),
+			.delayMs = 0,
+			.hasShift = false,
+		});
+	};
+
+	for (auto *child : _menu->children()) {
+		addHiddenTarget(qobject_cast<QWidget*>(child));
+	}
+	addHiddenTarget(_footer.get());
+	_revealPrepared = !_revealItems.empty();
+}
+
+void MainMenu::startSiteRevealAnimation() {
+	_revealAnimation.stop();
+	_revealPrepared = false;
 
 	std::vector<QWidget*> targets;
 	for (auto *child : _menu->children()) {
 		if (auto *w = qobject_cast<QWidget*>(child)) {
-			if (w->isVisible() && w->height() > 0) {
+			if (!w->isHidden() && w->height() > 0) {
 				targets.push_back(w);
 			}
 		}
@@ -705,9 +735,21 @@ void MainMenu::startSiteRevealAnimation() {
 	std::sort(targets.begin(), targets.end(), [](const QWidget *a, const QWidget *b) {
 		return a->y() < b->y();
 	});
-	if (_footer && _footer->isVisible() && _footer->height() > 0) {
+	if (_footer && !_footer->isHidden() && _footer->height() > 0) {
 		targets.push_back(_footer.get());
 	}
+
+	// Detach pre-hidden effects from any widget excluded from the active targets.
+	for (const auto &prev : _revealItems) {
+		if (prev.widget
+			&& std::find(targets.begin(), targets.end(), prev.widget.data()) == targets.end()) {
+			if (prev.hasShift) {
+				prev.widget->move(prev.widget->x(), prev.baseY);
+			}
+			prev.widget->setGraphicsEffect(nullptr);
+		}
+	}
+	_revealItems.clear();
 
 	if (targets.empty()) {
 		return;
@@ -716,9 +758,12 @@ void MainMenu::startSiteRevealAnimation() {
 	_revealItems.reserve(targets.size());
 	for (size_t i = 0; i < targets.size(); ++i) {
 		auto *w = targets[i];
-		auto *effect = new QGraphicsOpacityEffect(w);
+		auto *effect = qobject_cast<QGraphicsOpacityEffect*>(w->graphicsEffect());
+		if (!effect) {
+			effect = new QGraphicsOpacityEffect(w);
+			w->setGraphicsEffect(effect);
+		}
 		effect->setOpacity(0.0);
-		w->setGraphicsEffect(effect);
 
 		const auto baseY = w->y();
 		w->move(w->x(), baseY + kSiteRevealShiftPx);
@@ -727,6 +772,7 @@ void MainMenu::startSiteRevealAnimation() {
 			.effect = effect,
 			.baseY = baseY,
 			.delayMs = static_cast<int>(i) * kSiteRevealStaggerMs,
+			.hasShift = true,
 		});
 	}
 
@@ -760,16 +806,21 @@ void MainMenu::updateSiteRevealAnimation(float64 progress) {
 		if (item.effect) {
 			item.effect->setOpacity(op);
 		}
-		const auto yOffset = static_cast<int>(std::round((1.0 - mv) * kSiteRevealShiftPx));
-		item.widget->move(item.widget->x(), item.baseY + yOffset);
+		if (item.hasShift) {
+			const auto yOffset = static_cast<int>(std::round((1.0 - mv) * kSiteRevealShiftPx));
+			item.widget->move(item.widget->x(), item.baseY + yOffset);
+		}
 	}
 }
 
 void MainMenu::finishSiteRevealAnimation() {
+	_revealPrepared = false;
 	_revealAnimation.stop();
 	for (const auto &item : _revealItems) {
 		if (item.widget) {
-			item.widget->move(item.widget->x(), item.baseY);
+			if (item.hasShift) {
+				item.widget->move(item.widget->x(), item.baseY);
+			}
 			item.widget->setGraphicsEffect(nullptr);
 		}
 	}
@@ -937,7 +988,9 @@ void MainMenu::setupMenu() {
 }
 
 void MainMenu::resizeEvent(QResizeEvent *e) {
-	finishSiteRevealAnimation();
+	if (_revealAnimation.animating()) {
+		finishSiteRevealAnimation();
+	}
 	_inner->resizeToWidth(width());
 	updateControlsGeometry();
 }

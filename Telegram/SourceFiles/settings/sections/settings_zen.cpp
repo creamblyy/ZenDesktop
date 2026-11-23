@@ -9,6 +9,8 @@ This file is part of Telegram Desktop fork - ZenDesktop with RelayHooks.
 #include "relay_hooks/zen_updater.h"
 #include "relay_hooks/zen_badges.h"
 #include "relay_hooks/zen_ws_proxy.h"
+#include "base/call_delayed.h"
+#include "base/weak_ptr.h"
 #include "core/version.h"
 #include "core/file_utilities.h"
 #include "ui/vertical_list.h"
@@ -26,10 +28,14 @@ This file is part of Telegram Desktop fork - ZenDesktop with RelayHooks.
 #include "styles/style_settings.h"
 #include "styles/style_menu_icons.h"
 
+#include <QtCore/QPointer>
 #include <QtGui/QPainter>
 #include <QtGui/QPainterPath>
 #include <QtGui/QMouseEvent>
 #include <QtSvg/QSvgRenderer>
+#include <QGraphicsOpacityEffect>
+#include <algorithm>
+#include <cmath>
 
 namespace Settings {
 namespace {
@@ -60,6 +66,247 @@ void AddInsetDivider(not_null<Ui::VerticalLayout*> content, int leftMargin = 60)
 		c.setAlphaF(0.08); // M3 outline-variant tone
 		p.fillRect(divider->rect(), c);
 	}, divider->lifetime());
+}
+
+constexpr auto kZenRevealShiftPx = 12;
+constexpr auto kZenRevealStaggerMs = 30;
+constexpr auto kZenRevealOpacityMs = 220;
+constexpr auto kZenRevealMoveMs = 320;
+constexpr auto kZenExitDurationMs = 110;
+
+[[nodiscard]] float64 ZenCubicBezierEase(float64 t) {
+	if (t <= 0.0) {
+		return 0.0;
+	}
+	if (t >= 1.0) {
+		return 1.0;
+	}
+	auto lo = 0.0;
+	auto hi = 1.0;
+	for (int i = 0; i < 20; ++i) {
+		const auto mid = 0.5 * (lo + hi);
+		const auto inv = 1.0 - mid;
+		const auto x = 0.6 * mid * inv * inv + mid * mid * mid;
+		if (x < t) {
+			lo = mid;
+		} else {
+			hi = mid;
+		}
+	}
+	const auto u = 0.5 * (lo + hi);
+	return u * u * (3.0 - 2.0 * u);
+}
+
+struct ZenTransitionItem {
+	QPointer<QWidget> widget;
+	QPointer<QGraphicsOpacityEffect> effect;
+	int baseY = 0;
+	int delayMs = 0;
+	bool hasShift = false;
+};
+
+struct ZenTransitionState {
+	std::vector<ZenTransitionItem> items;
+	Ui::Animations::Simple revealAnimation;
+	Ui::Animations::Simple exitAnimation;
+	int totalMs = 0;
+	int lastWidth = -1;
+	bool navigating = false;
+};
+
+void FinishZenReveal(ZenTransitionState *state) {
+	if (!state) {
+		return;
+	}
+	state->revealAnimation.stop();
+	for (const auto &item : state->items) {
+		if (item.widget) {
+			if (item.hasShift) {
+				item.widget->move(item.widget->x(), item.baseY);
+			}
+			item.widget->setGraphicsEffect(nullptr);
+		}
+	}
+	state->items.clear();
+}
+
+void AttachZenSectionTransition(
+		not_null<AbstractSection*> section,
+		not_null<Ui::VerticalLayout*> content) {
+	const auto state = content->lifetime().make_state<ZenTransitionState>();
+
+	if (Relay::RelayHooks::Instance().isSwissMotionEnabled()) {
+		for (auto *child : content->children()) {
+			if (auto *w = qobject_cast<QWidget*>(child)) {
+				if (!w->isHidden()) {
+					auto *effect = new QGraphicsOpacityEffect(w);
+					effect->setOpacity(0.0);
+					w->setGraphicsEffect(effect);
+					state->items.push_back(ZenTransitionItem{
+						.widget = w,
+						.effect = effect,
+						.baseY = w->y(),
+						.delayMs = 0,
+						.hasShift = false,
+					});
+				}
+			}
+		}
+	}
+
+	content->widthValue() | rpl::on_next([=](int width) {
+		if (state->lastWidth != -1
+			&& state->lastWidth != width
+			&& state->revealAnimation.animating()) {
+			FinishZenReveal(state);
+		}
+		state->lastWidth = width;
+	}, content->lifetime());
+
+	section->showFinishes() | rpl::on_next([=] {
+		state->exitAnimation.stop();
+		state->navigating = false;
+		content->setProperty("zen_navigating", false);
+		content->setGraphicsEffect(nullptr);
+
+		if (!Relay::RelayHooks::Instance().isSwissMotionEnabled()) {
+			FinishZenReveal(state);
+			return;
+		}
+
+		state->revealAnimation.stop();
+		std::vector<QWidget*> targets;
+		for (auto *child : content->children()) {
+			if (auto *w = qobject_cast<QWidget*>(child)) {
+				if (!w->isHidden() && w->height() > 0) {
+					targets.push_back(w);
+				}
+			}
+		}
+		std::sort(targets.begin(), targets.end(), [](const QWidget *a, const QWidget *b) {
+			return a->y() < b->y();
+		});
+
+		for (const auto &prev : state->items) {
+			if (prev.widget
+				&& std::find(targets.begin(), targets.end(), prev.widget.data()) == targets.end()) {
+				if (prev.hasShift) {
+					prev.widget->move(prev.widget->x(), prev.baseY);
+				}
+				prev.widget->setGraphicsEffect(nullptr);
+			}
+		}
+		state->items.clear();
+
+		if (targets.empty()) {
+			return;
+		}
+
+		state->items.reserve(targets.size());
+		for (size_t i = 0; i < targets.size(); ++i) {
+			auto *w = targets[i];
+			auto *effect = qobject_cast<QGraphicsOpacityEffect*>(w->graphicsEffect());
+			if (!effect) {
+				effect = new QGraphicsOpacityEffect(w);
+				w->setGraphicsEffect(effect);
+			}
+			effect->setOpacity(0.0);
+
+			const auto baseY = w->y();
+			w->move(w->x(), baseY + kZenRevealShiftPx);
+			state->items.push_back(ZenTransitionItem{
+				.widget = w,
+				.effect = effect,
+				.baseY = baseY,
+				.delayMs = static_cast<int>(i) * kZenRevealStaggerMs,
+				.hasShift = true,
+			});
+		}
+
+		state->totalMs = static_cast<int>(state->items.size() - 1) * kZenRevealStaggerMs
+			+ kZenRevealMoveMs;
+
+		const auto weakContent = QPointer<QWidget>(content.get());
+		state->revealAnimation.start(
+			[=] {
+				if (!weakContent) {
+					return;
+				}
+				const auto progress = state->revealAnimation.value(1.);
+				const auto elapsedMs = progress * state->totalMs;
+				for (const auto &item : state->items) {
+					if (!item.widget) {
+						continue;
+					}
+					const auto localMs = elapsedMs - item.delayMs;
+					const auto op = ZenCubicBezierEase(
+						std::clamp(localMs / float64(kZenRevealOpacityMs), 0.0, 1.0));
+					const auto mv = ZenCubicBezierEase(
+						std::clamp(localMs / float64(kZenRevealMoveMs), 0.0, 1.0));
+					if (item.effect) {
+						item.effect->setOpacity(op);
+					}
+					if (item.hasShift) {
+						const auto yOffset = static_cast<int>(std::round((1.0 - mv) * kZenRevealShiftPx));
+						item.widget->move(item.widget->x(), item.baseY + yOffset);
+					}
+				}
+				if (!state->revealAnimation.animating()) {
+					FinishZenReveal(state);
+				}
+			},
+			0.,
+			1.,
+			state->totalMs,
+			anim::linear);
+	}, section->lifetime());
+}
+
+void NavigateZenSectionWithExit(
+		not_null<Ui::VerticalLayout*> content,
+		not_null<Window::SessionController*> ctrl,
+		Type target) {
+	if (!Relay::RelayHooks::Instance().isSwissMotionEnabled()) {
+		ctrl->showSettings(target);
+		return;
+	}
+	if (content->property("zen_navigating").toBool()) {
+		return;
+	}
+	content->setProperty("zen_navigating", true);
+
+	auto *effect = new QGraphicsOpacityEffect(content);
+	effect->setOpacity(1.0);
+	content->setGraphicsEffect(effect);
+
+	const auto anim = content->lifetime().make_state<Ui::Animations::Simple>();
+	const auto guard = QPointer<QWidget>(content.get());
+	const auto weakCtrl = base::make_weak(ctrl);
+	anim->start(
+		[=] {
+			if (!guard) {
+				return;
+			}
+			const auto v = anim->value(0.0);
+			if (auto *eff = qobject_cast<QGraphicsOpacityEffect*>(guard->graphicsEffect())) {
+				eff->setOpacity(v);
+			}
+			if (!anim->animating()) {
+				if (const auto strong = weakCtrl.get()) {
+					strong->showSettings(target);
+				}
+				base::call_delayed(250, guard.data(), [=] {
+					if (guard) {
+						guard->setGraphicsEffect(nullptr);
+						guard->setProperty("zen_navigating", false);
+					}
+				});
+			}
+		},
+		1.0,
+		0.0,
+		kZenExitDurationMs,
+		anim::easeOutCubic);
 }
 
 // ==========================================
@@ -234,6 +481,7 @@ void ZenPrivacy::setupContent() {
 	}, lifetime);
 
 	Ui::ResizeFitChild(this, content);
+	AttachZenSectionTransition(this, content);
 }
 
 // ==========================================
@@ -338,6 +586,7 @@ void ZenAppearance::setupContent() {
 	}, lifetime);
 
 	Ui::ResizeFitChild(this, content);
+	AttachZenSectionTransition(this, content);
 }
 
 // ==========================================
@@ -399,6 +648,7 @@ void ZenMessages::setupContent() {
 		rpl::single(QString::fromUtf8("Настройки быстрого взаимодействия с входящими и исходящими сообщениями.")));
 
 	Ui::ResizeFitChild(this, content);
+	AttachZenSectionTransition(this, content);
 }
 
 // ==========================================
@@ -452,6 +702,7 @@ void ZenTranslate::setupContent() {
 		rpl::single(QString::fromUtf8("Встроенный переводчик сообщений с поддержкой Google Translate, DeepL и Yandex.")));
 
 	Ui::ResizeFitChild(this, content);
+	AttachZenSectionTransition(this, content);
 }
 
 // ==========================================
@@ -520,6 +771,7 @@ void ZenNetwork::setupContent() {
 	}, lifetime);
 
 	Ui::ResizeFitChild(this, content);
+	AttachZenSectionTransition(this, content);
 }
 
 // ==========================================
@@ -559,6 +811,7 @@ void ZenPlugins::setupContent() {
 		rpl::single(QString::fromUtf8("Плагины позволяют расширять функционал ZenDesktop через JavaScript и нативные хуки. Движок активен и готов к установке расширений.")));
 
 	Ui::ResizeFitChild(this, content);
+	AttachZenSectionTransition(this, content);
 }
 
 // ==========================================
@@ -674,6 +927,7 @@ void ZenUpdates::setupContent() {
 	});
 
 	Ui::ResizeFitChild(this, content);
+	AttachZenSectionTransition(this, content);
 }
 
 // ==========================================
@@ -724,6 +978,7 @@ void ZenSupport::setupContent() {
 	});
 
 	Ui::ResizeFitChild(this, content);
+	AttachZenSectionTransition(this, content);
 }
 
 // ==========================================
@@ -809,6 +1064,7 @@ void ZenOther::setupContent() {
 	});
 
 	Ui::ResizeFitChild(this, content);
+	AttachZenSectionTransition(this, content);
 }
 
 // ==========================================
@@ -1191,9 +1447,9 @@ void Zen::setupContent() {
 			if (index >= 0 && index == pressed) {
 				if (index < count) {
 					const auto target = cards[index].target();
-					ctrl->showSettings(target);
+					NavigateZenSectionWithExit(content, ctrl, target);
 				} else if (index == 8) {
-					ctrl->showSettings(ZenOtherId());
+					NavigateZenSectionWithExit(content, ctrl, ZenOtherId());
 				}
 			}
 		}
@@ -1202,6 +1458,7 @@ void Zen::setupContent() {
 	content->add(std::move(result), QMargins(14, 0, 14, 16));
 
 	Ui::ResizeFitChild(this, content);
+	AttachZenSectionTransition(this, content);
 }
 
 } // namespace
