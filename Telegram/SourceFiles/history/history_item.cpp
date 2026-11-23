@@ -2502,18 +2502,6 @@ void HistoryItem::applyEdition(HistoryMessageEdition &&edition) {
 	const auto mediaCheck = edition.mtpMedia
 		? CheckMessageMedia(*edition.mtpMedia)
 		: MediaCheckResult::Good;
-	if (Relay::RelayHooks::Instance().isEditHistoryEnabled()
-		&& !updatingSavedLocalEdit
-		&& !isLocal()) {
-		const auto prevText = originalText().text;
-		if (!prevText.isEmpty() && prevText != updatedText.text) {
-			Relay::RelayHooks::Instance().recordMessageEdit(
-				history()->peer->id.value,
-				id.bare,
-				prevText,
-				(edition.editDate > 0) ? edition.editDate : base::unixtime::now());
-		}
-	}
 	if (updatingSavedLocalEdit) {
 		Get<HistoryMessageSavedMediaData>()->media
 			= (mediaCheck != MediaCheckResult::Unsupported

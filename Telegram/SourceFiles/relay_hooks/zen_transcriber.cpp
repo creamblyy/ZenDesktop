@@ -18,7 +18,7 @@ extern "C" {
 #include <QtCore/QDir>
 #include <QtCore/QFile>
 #include <QtCore/QFileInfo>
-#include <QtCore/QHttpMultiPart>
+#include <QtNetwork/QHttpMultiPart>
 #include <QtCore/QJsonDocument>
 #include <QtCore/QJsonObject>
 #include <QtCore/QProcess>

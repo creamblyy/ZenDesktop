@@ -23,6 +23,7 @@ This file is part of Telegram Desktop fork - ZenDesktop with RelayHooks.
 #include "storage/cache/storage_cache_database.h"
 #include "storage/localstorage.h"
 #include "ui/boxes/choose_font_box.h"
+#include "ui/chat/chat_theme.h"
 #include "window/themes/window_theme.h"
 #include "window/section_widget.h"
 #include "lang/lang_keys.h"
