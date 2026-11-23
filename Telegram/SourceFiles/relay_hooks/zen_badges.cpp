@@ -321,7 +321,7 @@ void ZenBadges::showBadgeInfoBox(
 	QString typeLabel;
 	switch (info->type) {
 	case ZenBadgeType::Developer:
-		title = QString::fromUtf8("Команда разработчиков ZenDesktop");
+		title = QString::fromUtf8("Разработчик ZenDesktop");
 		desc = QString::fromUtf8("%1 находится в команде разработчиков ZenDesktop.").arg(displayName);
 		typeLabel = QString::fromUtf8("Разработчик ZenDesktop");
 		break;
@@ -346,7 +346,7 @@ void ZenBadges::showBadgeInfoBox(
 	const auto badgeImg = getBadgeImage(info->type);
 
 	controller->show(Box([=](not_null<Ui::GenericBox*> box) {
-		box->setWidth(st::boxWidth);
+		box->setWidth(st::boxWideWidth);
 		const auto layout = box->verticalLayout();
 
 		auto icon = object_ptr<Ui::RpWidget>(layout);
@@ -379,7 +379,7 @@ void ZenBadges::showBadgeInfoBox(
 				st::boxLabel),
 			QMargins(24, 0, 24, 16),
 			style::al_top);
-		descLabel->resizeToWidth(st::boxWidth - 48);
+		descLabel->resizeToWidth(st::boxWideWidth - 48);
 
 		const auto addField = [&](const QString &value, const QString &caption) {
 			const auto valLabel = layout->add(
@@ -389,7 +389,7 @@ void ZenBadges::showBadgeInfoBox(
 					st::boxLabel),
 				QMargins(24, 6, 24, 0),
 				style::al_left);
-			valLabel->resizeToWidth(st::boxWidth - 48);
+			valLabel->resizeToWidth(st::boxWideWidth - 48);
 
 			const auto capLabel = layout->add(
 				object_ptr<Ui::FlatLabel>(
