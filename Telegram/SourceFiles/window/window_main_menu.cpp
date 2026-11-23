@@ -33,6 +33,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "info/profile/info_profile_icon.h"
 #include "info/stories/info_stories_widget.h"
 #include "lang/lang_keys.h"
+#include "relay_hooks/relay_hooks.h"
 #include "main/main_account.h"
 #include "main/main_app_config.h"
 #include "main/main_domain.h"
@@ -83,11 +84,41 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 
 #include <QtGui/QGuiApplication>
 #include <QtGui/QClipboard>
+#include <QGraphicsOpacityEffect>
+#include <algorithm>
+#include <cmath>
 
 namespace Window {
 namespace {
 
 constexpr auto kPlayStatusLimit = 2;
+constexpr auto kSiteRevealShiftPx = 10;
+constexpr auto kSiteRevealStaggerMs = 35;
+constexpr auto kSiteRevealOpacityMs = 250;
+constexpr auto kSiteRevealMoveMs = 350;
+
+[[nodiscard]] float64 CubicBezierEase(float64 t) {
+	if (t <= 0.0) {
+		return 0.0;
+	}
+	if (t >= 1.0) {
+		return 1.0;
+	}
+	auto lo = 0.0;
+	auto hi = 1.0;
+	for (int i = 0; i < 20; ++i) {
+		const auto mid = 0.5 * (lo + hi);
+		const auto inv = 1.0 - mid;
+		const auto x = 0.6 * mid * inv * inv + mid * mid * mid;
+		if (x < t) {
+			lo = mid;
+		} else {
+			hi = mid;
+		}
+	}
+	const auto u = 0.5 * (lo + hi);
+	return u * u * (3.0 - 2.0 * u);
+}
 
 [[nodiscard]] bool CanCheckSpecialEvent() {
 	static const auto result = [] {
@@ -470,7 +501,9 @@ MainMenu::MainMenu(
 	setupSwipe();
 }
 
-MainMenu::~MainMenu() = default;
+MainMenu::~MainMenu() {
+	finishSiteRevealAnimation();
+}
 
 void MainMenu::moveBadge() {
 	if (!_badge->widget()) {
@@ -652,6 +685,95 @@ void MainMenu::showFinished() {
 	_controller->checkHighlightControl(
 		u"main-menu/night-mode"_q,
 		_nightThemeToggle);
+
+	if (Relay::RelayHooks::Instance().isSwissMotionEnabled()) {
+		startSiteRevealAnimation();
+	}
+}
+
+void MainMenu::startSiteRevealAnimation() {
+	finishSiteRevealAnimation();
+
+	std::vector<QWidget*> targets;
+	for (auto *child : _menu->children()) {
+		if (auto *w = qobject_cast<QWidget*>(child)) {
+			if (w->isVisible() && w->height() > 0) {
+				targets.push_back(w);
+			}
+		}
+	}
+	std::sort(targets.begin(), targets.end(), [](const QWidget *a, const QWidget *b) {
+		return a->y() < b->y();
+	});
+	if (_footer && _footer->isVisible() && _footer->height() > 0) {
+		targets.push_back(_footer.get());
+	}
+
+	if (targets.empty()) {
+		return;
+	}
+
+	_revealItems.reserve(targets.size());
+	for (size_t i = 0; i < targets.size(); ++i) {
+		auto *w = targets[i];
+		auto *effect = new QGraphicsOpacityEffect(w);
+		effect->setOpacity(0.0);
+		w->setGraphicsEffect(effect);
+
+		const auto baseY = w->y();
+		w->move(w->x(), baseY + kSiteRevealShiftPx);
+		_revealItems.push_back(RevealItem{
+			.widget = w,
+			.effect = effect,
+			.baseY = baseY,
+			.delayMs = static_cast<int>(i) * kSiteRevealStaggerMs,
+		});
+	}
+
+	_revealTotalMs = static_cast<int>(_revealItems.size() - 1) * kSiteRevealStaggerMs
+		+ kSiteRevealMoveMs;
+
+	_revealAnimation.start(
+		[=] {
+			updateSiteRevealAnimation(_revealAnimation.value(1.));
+			if (!_revealAnimation.animating()) {
+				finishSiteRevealAnimation();
+			}
+		},
+		0.,
+		1.,
+		_revealTotalMs,
+		anim::linear);
+}
+
+void MainMenu::updateSiteRevealAnimation(float64 progress) {
+	const auto elapsedMs = progress * _revealTotalMs;
+	for (const auto &item : _revealItems) {
+		if (!item.widget) {
+			continue;
+		}
+		const auto localMs = elapsedMs - item.delayMs;
+		const auto opacityT = std::clamp(localMs / float64(kSiteRevealOpacityMs), 0.0, 1.0);
+		const auto moveT = std::clamp(localMs / float64(kSiteRevealMoveMs), 0.0, 1.0);
+		const auto op = CubicBezierEase(opacityT);
+		const auto mv = CubicBezierEase(moveT);
+		if (item.effect) {
+			item.effect->setOpacity(op);
+		}
+		const auto yOffset = static_cast<int>(std::round((1.0 - mv) * kSiteRevealShiftPx));
+		item.widget->move(item.widget->x(), item.baseY + yOffset);
+	}
+}
+
+void MainMenu::finishSiteRevealAnimation() {
+	_revealAnimation.stop();
+	for (const auto &item : _revealItems) {
+		if (item.widget) {
+			item.widget->move(item.widget->x(), item.baseY);
+			item.widget->setGraphicsEffect(nullptr);
+		}
+	}
+	_revealItems.clear();
 }
 
 void MainMenu::setupMenu() {
@@ -815,6 +937,7 @@ void MainMenu::setupMenu() {
 }
 
 void MainMenu::resizeEvent(QResizeEvent *e) {
+	finishSiteRevealAnimation();
 	_inner->resizeToWidth(width());
 	updateControlsGeometry();
 }
@@ -895,6 +1018,7 @@ bool MainMenu::eventHook(QEvent *event) {
 }
 
 void MainMenu::hideEvent(QHideEvent *e) {
+	finishSiteRevealAnimation();
 	_emojiStatusPanel->hideFast();
 }
 

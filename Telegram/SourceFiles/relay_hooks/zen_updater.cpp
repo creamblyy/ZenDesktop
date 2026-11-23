@@ -262,6 +262,24 @@ void ZenUpdater::startDownload(const QString &url, const QString &targetPath) {
 void ZenUpdater::launchUpdaterAndExit(const QString &newExePath) {
 	const auto currentExePath = QCoreApplication::applicationFilePath();
 	const auto pid = QCoreApplication::applicationPid();
+	const auto updaterPath = QDir(QCoreApplication::applicationDirPath()).filePath("Updater.exe");
+	if (QFileInfo::exists(updaterPath)) {
+		const auto args = QStringList{
+			"--pid",
+			QString::number(pid),
+			"--source",
+			QDir::toNativeSeparators(newExePath),
+			"--target",
+			QDir::toNativeSeparators(currentExePath),
+		};
+		LOG(("ZenUpdater: Starting native updater %1 and quitting application...").arg(updaterPath));
+		if (QProcess::startDetached(updaterPath, args)) {
+			QCoreApplication::quit();
+			return;
+		}
+		LOG(("ZenUpdater: Failed to launch Updater.exe, falling back to batch script."));
+	}
+
 	const auto tempDir = QStandardPaths::writableLocation(QStandardPaths::TempLocation);
 	const auto scriptPath = QDir(tempDir).filePath("zen_apply_update.bat");
 

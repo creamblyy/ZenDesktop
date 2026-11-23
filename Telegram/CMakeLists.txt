@@ -3261,6 +3261,22 @@ elseif (build_winstore)
     )
 endif()
 
+if (WIN32 AND NOT TARGET Updater)
+    add_executable(Updater WIN32
+        ${src_loc}/relay_hooks/zen_updater_bin.cpp
+    )
+    init_non_host_target(Updater)
+    add_dependencies(Telegram Updater)
+    set_target_properties(Updater PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY ${output_folder}
+    )
+    target_link_libraries(Updater PRIVATE
+        wininet
+        shell32
+        user32
+    )
+endif()
+
 if (LINUX AND DESKTOP_APP_USE_PACKAGED)
     include(GNUInstallDirs)
     configure_file("../lib/xdg/org.telegram.desktop.service" "${CMAKE_CURRENT_BINARY_DIR}/org.telegram.desktop.service" @ONLY)

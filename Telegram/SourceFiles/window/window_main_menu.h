@@ -13,7 +13,13 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "ui/rp_widget.h"
 #include "ui/unread_badge.h"
 #include "ui/controls/swipe_handler_data.h"
+#include "ui/effects/animations.h"
 #include "ui/layers/layer_widget.h"
+
+#include <QtCore/QPointer>
+#include <vector>
+
+class QGraphicsOpacityEffect;
 
 namespace base {
 enum class EventFilterResult;
@@ -86,6 +92,16 @@ private:
 		not_null<QEvent*> e);
 
 	void drawName(Painter &p);
+	void startSiteRevealAnimation();
+	void updateSiteRevealAnimation(float64 progress);
+	void finishSiteRevealAnimation();
+
+	struct RevealItem {
+		QPointer<QWidget> widget;
+		QPointer<QGraphicsOpacityEffect> effect;
+		int baseY = 0;
+		int delayMs = 0;
+	};
 
 	const not_null<SessionController*> _controller;
 	object_ptr<Ui::UserpicButton> _userpicButton;
@@ -111,6 +127,9 @@ private:
 	base::unique_qptr<Ui::PopupMenu> _contextMenu;
 
 	Ui::Controls::SwipeBackResult _swipeBackData;
+	std::vector<RevealItem> _revealItems;
+	Ui::Animations::Simple _revealAnimation;
+	int _revealTotalMs = 0;
 
 	rpl::variable<bool> _showFinished = false;
 	bool _insideEventRedirect = false;
