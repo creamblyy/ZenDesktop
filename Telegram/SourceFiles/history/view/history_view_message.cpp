@@ -59,6 +59,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "lang/lang_keys.h"
 #include "mainwidget.h"
 #include "main/main_session.h"
+#include "relay_hooks/relay_hooks.h"
 #include "settings/sections/settings_premium.h"
 #include "ui/text/text_options.h"
 #include "ui/painter.h"
@@ -1861,6 +1862,14 @@ void Message::draw(Painter &p, const PaintContext &context) const {
 	if (isHidden()) {
 		return;
 	}
+
+	const auto isRelayDeleted = Relay::RelayHooks::Instance().isAntiRecallEnabled()
+		&& Relay::RelayHooks::Instance().isMessageDeleted(
+			item->fullId().peer.value,
+			item->id.bare);
+	const auto deletedOpacity = ScopedPainterOpacity(
+		p,
+		isRelayDeleted ? (p.opacity() * 0.5) : p.opacity());
 
 	const auto entry = logEntryOriginal();
 	const auto check = factcheckBlock();

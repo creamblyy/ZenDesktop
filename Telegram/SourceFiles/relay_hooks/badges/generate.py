@@ -37,11 +37,11 @@ BADGES = {
         "desc": "Значок официального десктопного клиента",
         "svg_inner": """
         <!-- Monitor screen -->
-        <rect x="7.4" y="7.5" width="9.2" height="6.6" rx="1.2" fill="none" stroke="#FFFFFF" stroke-width="1.3" stroke-linejoin="round"/>
+        <rect x="7.4" y="7.4" width="9.2" height="5.4" rx="1.1" fill="none" stroke="#FFFFFF" stroke-width="1.6" stroke-linejoin="round"/>
         <!-- Monitor stand -->
-        <path d="M12 14.1v2.0" stroke="#FFFFFF" stroke-width="1.3" stroke-linecap="round"/>
+        <path d="M12 13.4v2.6" stroke="#FFFFFF" stroke-width="1.6" stroke-linecap="round"/>
         <!-- Monitor base foot -->
-        <path d="M9.8 16.1h4.4" stroke="#FFFFFF" stroke-width="1.3" stroke-linecap="round"/>
+        <path d="M9.4 16.2h5.2" stroke="#FFFFFF" stroke-width="1.6" stroke-linecap="round"/>
         """
     },
     "badge_dev": {
@@ -126,19 +126,22 @@ def draw_highres_pngs():
         # Inner icons
         if name == "badge_desktop":
             # Monitor
-            rx0, ry0 = pt(7.4, 7.5)
-            rx1, ry1 = pt(16.6, 14.1)
-            lw = int(1.3 * scale)
-            corner = int(1.2 * scale)
+            rx0, ry0 = pt(6.6, 6.7)
+            rx1, ry1 = pt(17.4, 13.5)
+            lw = int(round(1.6 * scale))
+            corner = int(round(1.2 * scale))
             draw.rounded_rectangle([rx0, ry0, rx1, ry1], radius=corner, outline=(255, 255, 255, 255), width=lw)
             # Stand
-            sx, sy0 = pt(12.0, 14.1)
-            _, sy1 = pt(12.0, 16.1)
+            sx, sy0 = pt(12.0, 13.3)
+            _, sy1 = pt(12.0, 16.3)
             draw.line([(sx, sy0), (sx, sy1)], fill=(255, 255, 255, 255), width=lw)
-            # Foot
-            fx0, fy = pt(9.8, 16.1)
-            fx1, _ = pt(14.2, 16.1)
+            # Foot with rounded ends
+            fx0, fy = pt(9.3, 16.3)
+            fx1, _ = pt(14.7, 16.3)
+            radius = lw / 2.0
             draw.line([(fx0, fy), (fx1, fy)], fill=(255, 255, 255, 255), width=lw)
+            for p_end in [(fx0, fy), (fx1, fy)]:
+                draw.ellipse([p_end[0] - radius, p_end[1] - radius, p_end[0] + radius, p_end[1] + radius], fill=(255, 255, 255, 255))
 
         elif name == "badge_dev":
             lw = 1.5 * scale

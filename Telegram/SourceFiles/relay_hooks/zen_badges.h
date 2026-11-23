@@ -69,6 +69,7 @@ private:
 
 	QMap<uint64_t, ZenBadgeInfo> _badges;
 	mutable QMap<ZenBadgeType, QImage> _badgeImages;
+	mutable QMap<ZenBadgeType, QImage> _badgeImagesSmall;
 };
 
 } // namespace Relay

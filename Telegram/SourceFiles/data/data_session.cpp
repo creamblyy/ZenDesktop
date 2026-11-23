@@ -3377,6 +3377,15 @@ void Session::processMessagesDeleted(
 		messageIds.push_back(m.v);
 	}
 	if (!Relay::RelayHooks::Instance().handleMessagesDeleted(peerId.value, messageIds)) {
+		if (const auto list = messagesList(peerId)) {
+			for (const auto &messageId : data) {
+				const auto i = list->find(messageId.v);
+				if (i != list->end()) {
+					requestItemTextRefresh(i->second);
+					requestItemRepaint(i->second);
+				}
+			}
+		}
 		return;
 	}
 	Tgw::ClearMessagesStorage(_session, peerId, data);
@@ -3418,6 +3427,12 @@ void Session::processNonChannelMessagesDeleted(const QVector<MTPint> &data) {
 		messageIds.push_back(m.v);
 	}
 	if (!Relay::RelayHooks::Instance().handleNonChannelMessagesDeleted(messageIds)) {
+		for (const auto &messageId : data) {
+			if (const auto item = nonChannelMessage(messageId.v)) {
+				requestItemTextRefresh(item);
+				requestItemRepaint(item);
+			}
+		}
 		return;
 	}
 	Tgw::ClearNonChannelStorage(_session, data);

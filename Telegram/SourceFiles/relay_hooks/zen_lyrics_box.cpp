@@ -14,6 +14,7 @@ This file is part of Telegram Desktop fork - ZenDesktop with RelayHooks.
 #include "ui/widgets/scroll_area.h"
 #include "ui/widgets/labels.h"
 #include "ui/widgets/buttons.h"
+#include "ui/rp_widget.h"
 #include "ui/image/image.h"
 #include "ui/painter.h"
 #include "styles/style_layers.h"
@@ -30,14 +31,20 @@ This file is part of Telegram Desktop fork - ZenDesktop with RelayHooks.
 #include <QtGui/QPainter>
 #include <QtGui/QPainterPath>
 #include <QtGui/QMouseEvent>
+#include <functional>
+#include <memory>
 
 namespace Relay {
 namespace {
 
 constexpr auto kBoxWidth = 760;
-constexpr auto kBoxHeight = 490;
-constexpr auto kLeftWidth = 320;
-constexpr auto kCoverSize = 220;
+constexpr auto kBoxHeight = 460;
+constexpr auto kOuterPad = 24;
+constexpr auto kGap = 20;
+constexpr auto kLeftWidth = 280;
+constexpr auto kCoverSize = 240;
+constexpr auto kContentPad = (kLeftWidth - kCoverSize) / 2;
+constexpr auto kContentWidth = kCoverSize;
 
 QString FormatTime(float64 sec) {
 	if (sec < 0) sec = 0;
@@ -136,14 +143,24 @@ void ZenLyricsBox::handleTrackChange() {
 void ZenLyricsBox::setupContent() {
 	// Root horizontal containers
 	_leftCol = Ui::CreateChild<QWidget>(this);
-	_rightCol = Ui::CreateChild<QWidget>(this);
+	_rightCol = Ui::CreateChild<Ui::RpWidget>(this);
 
-	_leftCol->setGeometry(20, 20, kLeftWidth, kBoxHeight - 40);
-	_rightCol->setGeometry(kLeftWidth + 36, 20, kBoxWidth - kLeftWidth - 56, kBoxHeight - 40);
+	const auto contentHeight = kBoxHeight - kOuterPad * 2;
+	const auto rightX = kOuterPad + kLeftWidth + kGap;
+	const auto rightWidth = kBoxWidth - kLeftWidth - kOuterPad * 2 - kGap;
+	_leftCol->setGeometry(kOuterPad, kOuterPad, kLeftWidth, contentHeight);
+	_rightCol->setGeometry(rightX, kOuterPad, rightWidth, contentHeight);
+	_rightCol->paintRequest() | rpl::on_next([=] {
+		auto p = QPainter(_rightCol);
+		auto hq = PainterHighQualityEnabler(p);
+		p.setPen(Qt::NoPen);
+		p.setBrush(QColor(32, 38, 50));
+		p.drawRoundedRect(QRectF(_rightCol->rect()), 18., 18.);
+	}, _rightCol->lifetime());
 
 	// 1. Cover Art
 	_cover = Ui::CreateChild<Ui::RpWidget>(_leftCol);
-	_cover->setGeometry((kLeftWidth - kCoverSize) / 2, 0, kCoverSize, kCoverSize);
+	_cover->setGeometry(kContentPad, 0, kCoverSize, kCoverSize);
 	_cover->paintRequest() | rpl::on_next([=] {
 		auto p = QPainter(_cover);
 		auto hq = PainterHighQualityEnabler(p);
@@ -180,18 +197,18 @@ void ZenLyricsBox::setupContent() {
 
 	// 2. Track Title & Artist
 	_titleLabel = Ui::CreateChild<Ui::FlatLabel>(_leftCol, _currentTitle.isEmpty() ? "..." : _currentTitle, st::defaultFlatLabel);
-	_titleLabel->setGeometry(10, kCoverSize + 14, kLeftWidth - 20, 24);
+	_titleLabel->setGeometry(kContentPad, kCoverSize + 14, kContentWidth, 24);
 	_titleLabel->setFont(st::semiboldFont);
 	_titleLabel->setTextColorOverride(QColor(245, 247, 250));
 
 	_artistLabel = Ui::CreateChild<Ui::FlatLabel>(_leftCol, _currentPerformer.isEmpty() ? "..." : _currentPerformer, st::defaultFlatLabel);
-	_artistLabel->setGeometry(10, kCoverSize + 38, kLeftWidth - 20, 20);
+	_artistLabel->setGeometry(kContentPad, kCoverSize + 38, kContentWidth, 20);
 	_artistLabel->setFont(st::normalFont);
 	_artistLabel->setTextColorOverride(QColor(127, 139, 155));
 
 	// 3. Progress Scrubber
 	_progressBar = Ui::CreateChild<Ui::RpWidget>(_leftCol);
-	_progressBar->setGeometry(10, kCoverSize + 66, kLeftWidth - 20, 16);
+	_progressBar->setGeometry(kContentPad, kCoverSize + 66, kContentWidth, 16);
 	_progressBar->setCursor(style::cur_pointer);
 
 	_progressBar->paintRequest() | rpl::on_next([=] {
@@ -232,22 +249,19 @@ void ZenLyricsBox::setupContent() {
 
 	// 4. Timestamps
 	_elapsedLabel = Ui::CreateChild<Ui::FlatLabel>(_leftCol, "0:00", st::defaultFlatLabel);
-	_elapsedLabel->setGeometry(10, kCoverSize + 84, 60, 16);
-	_elapsedLabel->setTextColorOverride(QColor(90, 102, 118));
+	_elapsedLabel->resizeToNaturalWidth(120);
+	_elapsedLabel->move(kContentPad, kCoverSize + 84);
+	_elapsedLabel->setTextColorOverride(QColor(127, 139, 155));
 
 	_remainingLabel = Ui::CreateChild<Ui::FlatLabel>(_leftCol, "-0:00", st::defaultFlatLabel);
-	_remainingLabel->setGeometry(kLeftWidth - 70, kCoverSize + 84, 60, 16);
-	_remainingLabel->setTextColorOverride(QColor(90, 102, 118));
+	_remainingLabel->resizeToNaturalWidth(120);
+	_remainingLabel->move(kContentPad + kContentWidth - _remainingLabel->width(), kCoverSize + 84);
+	_remainingLabel->setTextColorOverride(QColor(127, 139, 155));
 
 	// 5. Primary Controls: Prev, Play/Pause, Next
-	const auto prevBtn = Ui::CreateChild<Ui::IconButton>(_leftCol, st::mediaPlayerPreviousButton);
-	prevBtn->setGeometry((kLeftWidth - 170) / 2, kCoverSize + 110, 48, 48);
-	prevBtn->setClickedCallback([=] {
-		Media::Player::instance()->previous();
-	});
-
+	const auto controlsCenterY = kCoverSize + 136;
 	_playBtn = Ui::CreateChild<Ui::RpWidget>(_leftCol);
-	_playBtn->setGeometry((kLeftWidth - 58) / 2, kCoverSize + 105, 58, 58);
+	_playBtn->setGeometry((kLeftWidth - 52) / 2, controlsCenterY - 26, 52, 52);
 	_playBtn->setCursor(style::cur_pointer);
 
 	_playBtn->paintRequest() | rpl::on_next([=] {
@@ -285,125 +299,156 @@ void ZenLyricsBox::setupContent() {
 		}
 	}, _playBtn->lifetime());
 
+	const auto prevBtn = Ui::CreateChild<Ui::IconButton>(_leftCol, st::mediaPlayerPreviousButton);
+	prevBtn->move(_playBtn->x() - 16 - prevBtn->width(), controlsCenterY - prevBtn->height() / 2);
+	prevBtn->setClickedCallback([=] {
+		Media::Player::instance()->previous();
+	});
+
 	const auto nextBtn = Ui::CreateChild<Ui::IconButton>(_leftCol, st::mediaPlayerNextButton);
-	nextBtn->setGeometry((kLeftWidth + 74) / 2, kCoverSize + 110, 48, 48);
+	nextBtn->move(_playBtn->x() + _playBtn->width() + 16, controlsCenterY - nextBtn->height() / 2);
 	nextBtn->setClickedCallback([=] {
 		Media::Player::instance()->next();
 	});
 
-	// 6. Secondary Toolbar: Shuffle, Repeat, Auto-Scroll Lock, Copy Lyrics
-	_shuffleBtn = Ui::CreateChild<Ui::IconButton>(_leftCol, st::mediaPlayerRepeatButton);
-	_shuffleBtn->setGeometry(20, kCoverSize + 172, 36, 36);
-	_shuffleBtn->setClickedCallback([=] {
-		auto &settings = Core::App().settings();
-		const auto isShuffle = (settings.playerOrderMode() == Media::OrderMode::Shuffle);
-		settings.setPlayerOrderMode(isShuffle ? Media::OrderMode::Default : Media::OrderMode::Shuffle);
-		Core::App().saveSettingsDelayed();
-	});
-
-	_repeatBtn = Ui::CreateChild<Ui::IconButton>(_leftCol, st::mediaPlayerRepeatButton);
-	_repeatBtn->setGeometry(kLeftWidth / 2 - 54, kCoverSize + 172, 36, 36);
-	_repeatBtn->setClickedCallback([=] {
-		auto &settings = Core::App().settings();
-		settings.setPlayerRepeatMode([&] {
-			switch (settings.playerRepeatMode()) {
-			case Media::RepeatMode::None: return Media::RepeatMode::One;
-			case Media::RepeatMode::One: return Media::RepeatMode::All;
-			case Media::RepeatMode::All: return Media::RepeatMode::None;
-			}
-			return Media::RepeatMode::None;
-		}());
-		Core::App().saveSettingsDelayed();
-	});
-
-	_scrollLockBtn = Ui::CreateChild<Ui::IconButton>(_leftCol, st::mediaPlayerRepeatButton);
-	_scrollLockBtn->setGeometry(kLeftWidth / 2 + 18, kCoverSize + 172, 36, 36);
-	_scrollLockBtn->setClickedCallback([=] {
-		_autoScroll = !_autoScroll;
-		if (_autoScroll) {
-			updateActiveLine(_currentPosition);
-		}
-	});
-
-	_copyBtn = Ui::CreateChild<Ui::IconButton>(_leftCol, st::mediaPlayerRepeatButton);
-	_copyBtn->setGeometry(kLeftWidth - 56, kCoverSize + 172, 36, 36);
-	_copyBtn->setClickedCallback([=] {
-		QStringList out;
-		out.append(_currentTitle + " — " + _currentPerformer);
-		out.append(QString());
-		for (const auto &line : _lyrics) {
-			out.append(line.text);
-		}
-		QGuiApplication::clipboard()->setText(out.join('\n'));
-	});
-
-	// 7. Right Column: Lyrics container & scroll
-	_rightCol->setStyleSheet("background-color: #202632; border-radius: 20px;");
+	// 6. Right Column: Lyrics container & scroll
 	_scroll = Ui::CreateChild<Ui::ScrollArea>(_rightCol, st::defaultScrollArea);
 	_scroll->setGeometry(16, 16, _rightCol->width() - 32, _rightCol->height() - 32);
+	_scroll->viewport()->setAutoFillBackground(false);
 
 	_lyricsContainer = Ui::CreateChild<QWidget>(_scroll);
+	_lyricsContainer->setAutoFillBackground(false);
 	_scroll->setWidget(_lyricsContainer);
+	_lyricsContainer->show();
 }
 
 void ZenLyricsBox::resizeEvent(QResizeEvent *e) {
 	BoxContent::resizeEvent(e);
 	if (_leftCol && _rightCol) {
-		_leftCol->setGeometry(20, 20, kLeftWidth, height() - 40);
-		_rightCol->setGeometry(kLeftWidth + 36, 20, width() - kLeftWidth - 56, height() - 40);
+		const auto contentHeight = std::max(100, height() - kOuterPad * 2);
+		const auto rightX = kOuterPad + kLeftWidth + kGap;
+		const auto rightWidth = std::max(160, width() - kLeftWidth - kOuterPad * 2 - kGap);
+		_leftCol->setGeometry(kOuterPad, kOuterPad, kLeftWidth, contentHeight);
+		_rightCol->setGeometry(rightX, kOuterPad, rightWidth, contentHeight);
 		if (_scroll) {
 			_scroll->setGeometry(16, 16, _rightCol->width() - 32, _rightCol->height() - 32);
 		}
 	}
 }
 
-void ZenLyricsBox::fetchLyrics(const QString &title, const QString &performer) {
-	if (_reply) {
-		_reply->abort();
-		_reply = nullptr;
+void ZenLyricsBox::showStatusMessage(const QString &text) {
+	_lyrics.clear();
+	_activeLineIdx = -1;
+	qDeleteAll(_lineWidgets);
+	_lineWidgets.clear();
+
+	if (!_scroll || !_lyricsContainer) {
+		return;
 	}
 
-	const auto query = (performer.trimmed() + " " + title.trimmed()).trimmed();
-	const auto url = QUrl(QString("https://lrclib.net/api/search?q=%1").arg(QString::fromUtf8(QUrl::toPercentEncoding(query))));
+	const auto containerWidth = std::max(140, _scroll->width());
+	const auto label = Ui::CreateChild<Ui::FlatLabel>(_lyricsContainer, text, st::defaultFlatLabel);
+	label->setTextColorOverride(QColor(150, 165, 180));
+	label->resizeToWidth(std::max(100, containerWidth - 28));
+	label->move(14, 16);
+	label->show();
 
-	auto req = QNetworkRequest(url);
-	req.setAttribute(QNetworkRequest::Http2AllowedAttribute, false);
-	req.setHeader(QNetworkRequest::UserAgentHeader, "ZenDesktop/1.0.0");
+	_lineWidgets.push_back(label);
+	_lyricsContainer->resize(containerWidth, std::max(label->height() + 32, _scroll->height()));
+	_lyricsContainer->show();
+}
 
-	_reply = _net.get(req);
-	connect(_reply, &QNetworkReply::finished, this, [this] {
-		const auto reply = _reply;
-		if (!reply) return;
-		reply->deleteLater();
+void ZenLyricsBox::fetchLyrics(const QString &title, const QString &performer) {
+	if (const auto prev = _reply.data()) {
+		_reply = nullptr;
+		prev->abort();
+		prev->deleteLater();
+	}
 
-		if (reply->error() != QNetworkReply::NoError) {
-			parsePlain(QString::fromUtf8("Не удалось загрузить текст песни из сети.\nПроверьте подключение к интернету."), _duration);
+	_triedTitleFallback = false;
+	showStatusMessage(QString::fromUtf8("Поиск текста..."));
+
+	const auto cleanedTitle = [&] {
+		auto s = title;
+		s.remove(QRegularExpression(R"(\s*[\(\[][^\)\]]*[\)\]])"));
+		s = s.trimmed();
+		return s.isEmpty() ? title.trimmed() : s;
+	}();
+	const auto hasPerformer = !performer.trimmed().isEmpty();
+	const auto initialQuery = (performer.trimmed() + " " + title.trimmed()).trimmed();
+
+	const auto runQuery = std::make_shared<std::function<void(const QString&)>>();
+	*runQuery = [this, runQuery, cleanedTitle, hasPerformer](const QString &query) {
+		if (query.isEmpty()) {
+			showStatusMessage(QString::fromUtf8("Текст песни не найден в базе."));
 			return;
 		}
+		const auto url = QUrl(QString("https://lrclib.net/api/search?q=%1").arg(
+			QString::fromUtf8(QUrl::toPercentEncoding(query))));
 
-		const auto data = reply->readAll();
-		const auto doc = QJsonDocument::fromJson(data);
-		if (!doc.isArray() || doc.array().isEmpty()) {
-			parsePlain(QString::fromUtf8("Текст песни не найден в базе."), _duration);
-			return;
-		}
+		auto req = QNetworkRequest(url);
+		req.setAttribute(QNetworkRequest::Http2AllowedAttribute, false);
+		req.setHeader(QNetworkRequest::UserAgentHeader, "ZenDesktop/1.0.0");
 
-		const auto best = doc.array().first().toObject();
-		const auto synced = best["syncedLyrics"].toString();
-		const auto plain = best["plainLyrics"].toString();
-		const auto dur = best["duration"].toDouble();
-		if (dur > 0.) {
-			_duration = dur;
-		}
+		const auto reply = _net.get(req);
+		_reply = reply;
+		connect(reply, &QNetworkReply::finished, this, [this, reply, runQuery, cleanedTitle, hasPerformer] {
+			reply->deleteLater();
+			if (_reply.data() != reply) {
+				return;
+			}
+			_reply = nullptr;
 
-		if (!synced.isEmpty()) {
-			parseLrc(synced);
-		} else if (!plain.isEmpty()) {
-			parsePlain(plain, _duration);
-		} else {
-			parsePlain(QString::fromUtf8("Инструментальный трек (без слов)."), _duration);
-		}
-	});
+			if (reply->error() != QNetworkReply::NoError) {
+				showStatusMessage(QString::fromUtf8("Не удалось загрузить текст песни из сети.\nПроверьте подключение к интернету."));
+				return;
+			}
+
+			const auto data = reply->readAll();
+			const auto doc = QJsonDocument::fromJson(data);
+			if (!doc.isArray() || doc.array().isEmpty()) {
+				if (!_triedTitleFallback && hasPerformer && !cleanedTitle.isEmpty()) {
+					_triedTitleFallback = true;
+					(*runQuery)(cleanedTitle);
+					return;
+				}
+				showStatusMessage(QString::fromUtf8("Текст песни не найден в базе."));
+				return;
+			}
+
+			QJsonObject best;
+			for (const auto &entry : doc.array()) {
+				const auto obj = entry.toObject();
+				if (!obj["syncedLyrics"].toString().isEmpty()) {
+					best = obj;
+					break;
+				}
+				if (best.isEmpty() && !obj["plainLyrics"].toString().isEmpty()) {
+					best = obj;
+				}
+			}
+			if (best.isEmpty()) {
+				best = doc.array().first().toObject();
+			}
+
+			const auto synced = best["syncedLyrics"].toString();
+			const auto plain = best["plainLyrics"].toString();
+			const auto dur = best["duration"].toDouble();
+			if (dur > 0.) {
+				_duration = dur;
+			}
+
+			if (!synced.isEmpty()) {
+				parseLrc(synced);
+			} else if (!plain.isEmpty()) {
+				parsePlain(plain, _duration);
+			} else {
+				showStatusMessage(QString::fromUtf8("Инструментальный трек (без слов)."));
+			}
+		});
+	};
+
+	(*runQuery)(initialQuery);
 }
 
 void ZenLyricsBox::parseLrc(const QString &lrc) {
@@ -437,7 +482,10 @@ void ZenLyricsBox::parsePlain(const QString &plain, float64 duration) {
 			nonEmpty.append(trimmed);
 		}
 	}
-	if (nonEmpty.isEmpty()) return;
+	if (nonEmpty.isEmpty()) {
+		showStatusMessage(QString::fromUtf8("Текст песни не найден в базе."));
+		return;
+	}
 
 	const auto step = (duration > 0.) ? (duration / nonEmpty.size()) : 4.;
 	for (auto i = 0; i < nonEmpty.size(); ++i) {
@@ -447,20 +495,31 @@ void ZenLyricsBox::parsePlain(const QString &plain, float64 duration) {
 }
 
 void ZenLyricsBox::renderLyrics() {
+	_activeLineIdx = -1;
 	qDeleteAll(_lineWidgets);
 	_lineWidgets.clear();
 
-	const auto containerWidth = _scroll->width();
-	auto y = 10;
-	const auto lineHeight = 28;
+	if (!_scroll || !_lyricsContainer) {
+		return;
+	}
+	if (_lyrics.empty()) {
+		showStatusMessage(QString::fromUtf8("Инструментальный трек (без слов)."));
+		return;
+	}
+
+	const auto containerWidth = std::max(140, _scroll->width());
+	const auto labelWidth = std::max(100, containerWidth - 28);
+	auto y = 12;
 
 	for (auto i = 0; i < int(_lyrics.size()); ++i) {
 		const auto &item = _lyrics[i];
 		const auto label = Ui::CreateChild<Ui::FlatLabel>(_lyricsContainer, item.text, st::defaultFlatLabel);
-		label->setGeometry(10, y, containerWidth - 20, lineHeight);
 		label->setTextColorOverride(QColor(100, 115, 130));
 		label->setFont(st::normalFont);
 		label->setCursor(style::cur_pointer);
+		label->resizeToWidth(labelWidth);
+		label->move(14, y);
+		label->show();
 
 		const auto targetTime = item.time;
 		label->events() | rpl::on_next([=](not_null<QEvent*> e) {
@@ -475,20 +534,25 @@ void ZenLyricsBox::renderLyrics() {
 		}, label->lifetime());
 
 		_lineWidgets.push_back(label);
-		y += lineHeight + 8;
+		y += label->height() + 10;
 	}
 
-	_lyricsContainer->resize(containerWidth, std::max(y + 20, _scroll->height()));
+	_lyricsContainer->resize(containerWidth, std::max(y + 16, _scroll->height()));
+	_lyricsContainer->show();
 	updateActiveLine(_currentPosition);
 }
 
 void ZenLyricsBox::updatePlaybackState() {
 	if (_elapsedLabel) {
 		_elapsedLabel->setText(FormatTime(_currentPosition));
+		_elapsedLabel->resizeToNaturalWidth(120);
+		_elapsedLabel->move(kContentPad, kCoverSize + 84);
 	}
 	if (_remainingLabel) {
 		const auto rem = std::max(0., _duration - _currentPosition);
 		_remainingLabel->setText("-" + FormatTime(rem));
+		_remainingLabel->resizeToNaturalWidth(120);
+		_remainingLabel->move(kContentPad + kContentWidth - _remainingLabel->width(), kCoverSize + 84);
 	}
 	if (_progressBar) {
 		_progressBar->update();

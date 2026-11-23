@@ -36,6 +36,28 @@ constexpr auto kBarePeerMask = uint64_t(0xFFFFFFFFFFFFULL);
 	return peerId & kBarePeerMask;
 }
 
+[[nodiscard]] QImage DownscaleCrisp(const QImage &src, int targetPx) {
+	if (src.isNull() || targetPx <= 0) {
+		return src;
+	}
+	auto cur = src.convertToFormat(QImage::Format_ARGB32_Premultiplied);
+	while (cur.width() > targetPx * 2 && cur.height() > targetPx * 2) {
+		cur = cur.scaled(
+			cur.width() / 2,
+			cur.height() / 2,
+			Qt::IgnoreAspectRatio,
+			Qt::SmoothTransformation);
+	}
+	if (cur.width() != targetPx || cur.height() != targetPx) {
+		cur = cur.scaled(
+			targetPx,
+			targetPx,
+			Qt::IgnoreAspectRatio,
+			Qt::SmoothTransformation);
+	}
+	return cur;
+}
+
 ZenBadgeType ParseBadgeType(const QString &str) {
 	if (str == "dev" || str == "developer") {
 		return ZenBadgeType::Developer;
@@ -101,6 +123,11 @@ void ZenBadges::initBadgeImages() {
 	loadImg(ZenBadgeType::Developer, exeDir + "relay_hooks/badges/badge_dev_small.png");
 	loadImg(ZenBadgeType::Staff, exeDir + "relay_hooks/badges/badge_staff_small.png");
 	loadImg(ZenBadgeType::Supporter, exeDir + "relay_hooks/badges/badge_supporter_small.png");
+
+	_badgeImagesSmall.clear();
+	for (auto it = _badgeImages.cbegin(); it != _badgeImages.cend(); ++it) {
+		_badgeImagesSmall[it.key()] = DownscaleCrisp(it.value(), kBadgeWidth * 2);
+	}
 }
 
 void ZenBadges::loadDefaultBadges() {
@@ -259,7 +286,10 @@ int ZenBadges::drawBadge(
 		return 0;
 	}
 
-	const auto &img = getBadgeImage(info->type);
+	const auto smallIt = _badgeImagesSmall.constFind(info->type);
+	const auto &img = (smallIt != _badgeImagesSmall.constEnd() && !smallIt.value().isNull())
+		? smallIt.value()
+		: getBadgeImage(info->type);
 	const auto targetX = rectForName.x() + std::min(nameWidth + kBadgeSpacing, rectForName.width() - kBadgeWidth);
 	const auto targetY = rectForName.y() + (rectForName.height() - kBadgeHeight) / 2;
 

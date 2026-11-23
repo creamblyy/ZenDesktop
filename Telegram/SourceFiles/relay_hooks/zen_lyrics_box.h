@@ -50,6 +50,7 @@ private:
 	void updatePlaybackState();
 	void updateActiveLine(float64 seconds);
 	void renderLyrics();
+	void showStatusMessage(const QString &text);
 
 	const not_null<Window::SessionController*> _controller;
 	QNetworkAccessManager _net;
@@ -58,6 +59,7 @@ private:
 	std::vector<LyricLine> _lyrics;
 	int _activeLineIdx = -1;
 	bool _autoScroll = true;
+	bool _triedTitleFallback = false;
 
 	AudioMsgId _currentAudioId;
 	std::shared_ptr<Data::DocumentMedia> _coverMedia;
@@ -68,7 +70,7 @@ private:
 	bool _isPlaying = false;
 
 	QWidget *_leftCol = nullptr;
-	QWidget *_rightCol = nullptr;
+	Ui::RpWidget *_rightCol = nullptr;
 	Ui::ScrollArea *_scroll = nullptr;
 	QWidget *_lyricsContainer = nullptr;
 	std::vector<Ui::FlatLabel*> _lineWidgets;
@@ -80,10 +82,6 @@ private:
 	Ui::FlatLabel *_elapsedLabel = nullptr;
 	Ui::FlatLabel *_remainingLabel = nullptr;
 	Ui::RpWidget *_playBtn = nullptr;
-	Ui::IconButton *_shuffleBtn = nullptr;
-	Ui::IconButton *_repeatBtn = nullptr;
-	Ui::IconButton *_scrollLockBtn = nullptr;
-	Ui::IconButton *_copyBtn = nullptr;
 };
 
 } // namespace Relay
