@@ -502,7 +502,12 @@ void ZenUpdater::startDownload(const QString &url, const QString &targetPath) {
 void ZenUpdater::launchUpdaterAndExit(const QString &newExePath) {
 	const auto currentExePath = QCoreApplication::applicationFilePath();
 	const auto pid = QCoreApplication::applicationPid();
-	const auto appArgs = QCoreApplication::arguments().mid(1);
+	QStringList appArgs;
+	const auto workDir = QDir::cleanPath(cWorkingDir());
+	const auto exeDir = QDir::cleanPath(QCoreApplication::applicationDirPath());
+	if (!workDir.isEmpty() && workDir.compare(exeDir, Qt::CaseInsensitive) != 0) {
+		appArgs << QString("-workdir") << QDir::toNativeSeparators(workDir);
+	}
 	const auto updaterPath = QDir(QCoreApplication::applicationDirPath()).filePath("Updater.exe");
 	if (QFileInfo::exists(updaterPath)) {
 		auto args = QStringList{
