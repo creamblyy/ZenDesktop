@@ -229,9 +229,9 @@ jobs:
         id: build-cache
         with:
           path: tdesktop/out
-          key: ${{ runner.os }}-x64-out-${{ github.sha }}
+          key: ${{ runner.os }}-x64-out-v2-${{ github.sha }}
           restore-keys: |
-            ${{ runner.os }}-x64-out-
+            ${{ runner.os }}-x64-out-v2-
 
       - name: Synchronize Timestamps for Incremental Build
         if: steps.build-cache.outputs.cache-hit == 'true' || steps.build-cache.outputs.cache-matched-key != ''
@@ -242,6 +242,9 @@ jobs:
           Get-ChildItem -Path "tdesktop\out" -Filter "*.obj" -Recurse -File -ErrorAction SilentlyContinue | ForEach-Object {
               $_.LastWriteTime = $now
           }
+          $shaFile = "tdesktop\out\.zen_cached_sha"
+          $baseSha = if (Test-Path $shaFile) { (Get-Content $shaFile -Raw).Trim() } else { "HEAD~1" }
+          Write-Host "Diffing changed files against cached commit: $baseSha"
           git -C tdesktop status --porcelain | ForEach-Object {
               $file = $_.Substring(3).Trim()
               $fullPath = "tdesktop\$file"
@@ -250,7 +253,11 @@ jobs:
                   Write-Host "Marked modified for recompilation: $file"
               }
           }
-          git -C tdesktop diff --name-only HEAD~1 2>$null | ForEach-Object {
+          $diffFiles = git -C tdesktop diff --name-only $baseSha HEAD 2>$null
+          if ($LASTEXITCODE -ne 0) {
+              $diffFiles = git -C tdesktop diff --name-only HEAD~1 2>$null
+          }
+          $diffFiles | ForEach-Object {
               $fullPath = "tdesktop\$_"
               if (Test-Path $fullPath) {
                   (Get-Item $fullPath).LastWriteTime = (Get-Date).AddMinutes(1)
@@ -305,11 +312,12 @@ jobs:
         shell: pwsh
         run: |
           Get-ChildItem -Path "$env:GITHUB_WORKSPACE\tdesktop\out" -Filter "*.pdb" -Recurse -File -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
-          Write-Host "Cleaned PDB files to keep build cache archive compact."
+          "${{ github.sha }}" | Set-Content -Path "$env:GITHUB_WORKSPACE\tdesktop\out\.zen_cached_sha" -Encoding ascii -NoNewline
+          Write-Host "Cleaned PDB files and recorded cached commit SHA."
 
       - name: Save Build Output Cache
         uses: actions/cache/save@v4
         if: success()
         with:
           path: tdesktop/out
-          key: ${{ runner.os }}-x64-out-${{ github.sha }}
+          key: ${{ runner.os }}-x64-out-v2-${{ github.sha }}

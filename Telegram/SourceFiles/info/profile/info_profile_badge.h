@@ -10,6 +10,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "base/flags.h"
 #include "base/object_ptr.h"
 
+#include <cstdint>
+
 namespace style {
 struct InfoPeerBadge;
 } // namespace style
@@ -43,6 +45,7 @@ enum class BadgeType : uchar {
 	Scam = 0x08,
 	Fake = 0x10,
 	Direct = 0x20,
+	Zen = 0x40,
 };
 inline constexpr bool is_flag_type(BadgeType) { return true; }
 
@@ -51,6 +54,7 @@ public:
 	struct Content {
 		BadgeType badge = BadgeType::None;
 		EmojiStatusId emojiStatusId;
+		uint64_t zenPeerId = 0;
 
 		friend inline bool operator==(Content, Content) = default;
 	};

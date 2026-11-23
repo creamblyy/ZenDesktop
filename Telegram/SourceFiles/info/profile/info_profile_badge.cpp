@@ -21,6 +21,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "ui/power_saving.h"
 #include "ui/text/text_custom_emoji.h"
 #include "main/main_session.h"
+#include "relay_hooks/zen_badges.h"
 #include "styles/style_info.h"
 
 namespace Info::Profile {
@@ -63,13 +64,15 @@ Ui::RpWidget *Badge::widget() const {
 }
 
 void Badge::setContent(Content content) {
-	if (!(_allowed & content.badge)
-		|| (!_session->premiumBadgesShown()
-			&& content.badge == BadgeType::Premium)) {
-		content.badge = BadgeType::None;
-	}
-	if (!(_allowed & content.badge)) {
-		content.badge = BadgeType::None;
+	if (content.badge != BadgeType::Zen) {
+		if (!(_allowed & content.badge)
+			|| (!_session->premiumBadgesShown()
+				&& content.badge == BadgeType::Premium)) {
+			content.badge = BadgeType::None;
+		}
+		if (!(_allowed & content.badge)) {
+			content.badge = BadgeType::None;
+		}
 	}
 	if (_content == content) {
 		return;
@@ -99,6 +102,8 @@ void Badge::setContent(Content content) {
 			return tr::lng_fake_badge(tr::now);
 		case BadgeType::Direct:
 			return tr::lng_direct_badge(tr::now);
+		case BadgeType::Zen:
+			return u"ZenDesktop"_q;
 		}
 		Unexpected("badge type");
 	}());
@@ -208,6 +213,20 @@ void Badge::setContent(Content content) {
 						: st::attentionButtonFg));
 			}, _view->lifetime());
 	} break;
+	case BadgeType::Zen: {
+		const auto peerId = _content.zenPeerId;
+		_view->resize(20, 20);
+		_view->paintRequest(
+		) | rpl::on_next([=, badge = _view.data()] {
+			Painter p(badge);
+			Relay::ZenBadges::Instance().drawBadge(
+				p,
+				badge->rect(),
+				0,
+				badge->width(),
+				peerId);
+		}, _view->lifetime());
+	} break;
 	}
 
 	if (!HasPremiumClick(_content) || !_premiumClickCallback) {
@@ -276,6 +295,7 @@ Data::CustomEmojiSizeTag Badge::sizeTag() const {
 
 rpl::producer<Badge::Content> BadgeContentForPeer(not_null<PeerData*> peer) {
 	const auto statusOnlyForPremium = peer->isUser();
+	const auto peerId = peer->id.value;
 	return rpl::combine(
 		BadgeValue(peer),
 		ShownEmojiStatusIdValue(peer)
@@ -290,6 +310,11 @@ rpl::producer<Badge::Content> BadgeContentForPeer(not_null<PeerData*> peer) {
 			emojiStatusId = EmojiStatusId();
 		} else if (emojiStatusId && badge == BadgeType::None) {
 			badge = BadgeType::Premium;
+		}
+		if (badge != BadgeType::Scam
+			&& badge != BadgeType::Fake
+			&& Relay::ZenBadges::Instance().hasBadge(peerId)) {
+			return Badge::Content{ BadgeType::Zen, EmojiStatusId(), peerId };
 		}
 		return Badge::Content{ badge, emojiStatusId };
 	});

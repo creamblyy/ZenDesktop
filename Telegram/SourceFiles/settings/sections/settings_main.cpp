@@ -78,6 +78,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "ui/vertical_list.h"
 #include "ui/widgets/buttons.h"
 #include <QtGui/QPainter>
+#include <QtGui/QPainterPath>
 #include "ui/effects/ripple_animation.h"
 #include "ui/widgets/continuous_sliders.h"
 #include "ui/widgets/menu/menu_add_action_callback.h"
@@ -375,8 +376,7 @@ void BuildSectionButtons(SectionBuilder &builder) {
 		.keywords = { u"zen"_q, u"zendesktop"_q, u"relay"_q, u"hooks"_q, u"ghost"_q, u"anti-recall"_q },
 	});
 
-	builder.addDivider();
-	builder.addSkip();
+	builder.addSkip(12);
 
 	if (!session->supportMode()) {
 		builder.addButton({
@@ -491,8 +491,7 @@ void BuildInterfaceScale(SectionBuilder &builder) {
 		return;
 	}
 
-	builder.addDivider();
-	builder.addSkip();
+	builder.addSkip(12);
 
 	builder.add([](const WidgetContext &ctx) {
 		const auto window = &ctx.controller->window();
@@ -519,8 +518,7 @@ void BuildPremiumSection(SectionBuilder &builder) {
 		return;
 	}
 
-	builder.addDivider();
-	builder.addSkip();
+	builder.addSkip(12);
 
 	builder.addPremiumButton({
 		.id = u"main/premium"_q,
@@ -600,8 +598,7 @@ protected:
 };
 
 void BuildHelpSection(SectionBuilder &builder) {
-	builder.addDivider();
-	builder.addSkip();
+	builder.addSkip(12);
 
 	const auto controller = builder.controller();
 	const auto faq = builder.addButton({
@@ -764,8 +761,7 @@ void Main::setupContent() {
 			.isPaused = isPaused,
 			.highlights = highlights,
 		});
-		builder.addDivider();
-		builder.addSkip();
+		builder.addSkip(12);
 		BuildValidationSuggestions(builder);
 		BuildSectionButtons(builder);
 		builder.addSkip();
@@ -786,13 +782,82 @@ void Main::setupContent() {
 	};
 	build(content, buildMethod);
 
+	std::vector<std::vector<Ui::SettingsButton*>> groups;
+	std::vector<Ui::SettingsButton*> currentGroup;
+	const auto flushGroup = [&] {
+		if (!currentGroup.empty()) {
+			groups.push_back(std::move(currentGroup));
+			currentGroup.clear();
+		}
+	};
 	for (const auto child : content->children()) {
 		if (const auto btn = dynamic_cast<Ui::SettingsButton*>(child)) {
+			currentGroup.push_back(btn);
+		} else if (const auto wrap = dynamic_cast<Ui::SlideWrap<Ui::SettingsButton>*>(child)) {
+			if (wrap->toggled()) {
+				currentGroup.push_back(wrap->entity());
+			}
+		} else if (const auto wrap = dynamic_cast<Ui::SlideWrap<Ui::VerticalLayout>*>(child)) {
+			if (wrap->toggled()) {
+				for (const auto inner : wrap->entity()->children()) {
+					if (const auto btn = dynamic_cast<Ui::SettingsButton*>(inner)) {
+						currentGroup.push_back(btn);
+					}
+				}
+			}
+		} else if (const auto layout = dynamic_cast<Ui::VerticalLayout*>(child)) {
+			if (!layout->children().isEmpty()) {
+				flushGroup();
+			}
+		} else if (child->isWidgetType()) {
+			flushGroup();
+		}
+	}
+	flushGroup();
+
+	for (const auto &group : groups) {
+		const auto count = int(group.size());
+		for (int i = 0; i < count; ++i) {
+			const auto btn = group[i];
+			const auto isFirst = (i == 0);
+			const auto isLast = (i + 1 == count);
 			btn->paintRequest() | rpl::on_next([=] {
 				auto p = QPainter(btn);
-				auto divider = st::windowFg->c;
-				divider.setAlphaF(0.07);
-				p.fillRect(56, btn->height() - 1, btn->width() - 72, 1, divider);
+				p.setRenderHint(QPainter::Antialiasing);
+				constexpr auto kMarginX = 12.0;
+				constexpr auto kRadius = 16.0;
+				const auto w = double(btn->width());
+				const auto h = double(btn->height());
+				if (w <= 2.0 * kMarginX || h <= 0.0) {
+					return;
+				}
+				const auto topPad = isFirst ? 0.0 : kRadius;
+				const auto bottomPad = isLast ? 0.0 : kRadius;
+				QPainterPath rounded;
+				rounded.addRoundedRect(
+					QRectF(kMarginX, -topPad, w - 2.0 * kMarginX, h + topPad + bottomPad),
+					kRadius,
+					kRadius);
+				QPainterPath full;
+				full.addRect(QRectF(0.0, 0.0, w, h));
+				const auto cardPath = rounded.intersected(full);
+				const auto maskPath = full.subtracted(cardPath);
+
+				auto tint = st::windowFg->c;
+				tint.setAlphaF(0.05);
+				p.fillPath(cardPath, tint);
+				p.fillPath(maskPath, st::windowBg->c);
+
+				if (!isLast) {
+					auto divider = st::windowFg->c;
+					divider.setAlphaF(0.07);
+					p.fillRect(
+						int(kMarginX) + 16,
+						btn->height() - 1,
+						btn->width() - 2 * int(kMarginX) - 32,
+						1,
+						divider);
+				}
 			}, btn->lifetime());
 		}
 	}
@@ -837,8 +902,7 @@ const auto kMeta = BuildHelper({
 	.title = &tr::lng_menu_settings,
 	.icon = &st::menuIconSettings,
 }, [](SectionBuilder &builder) {
-	builder.addDivider();
-	builder.addSkip();
+	builder.addSkip(12);
 
 	builder.add(nullptr, [] {
 		return SearchEntry{
