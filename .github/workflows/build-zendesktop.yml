@@ -53,7 +53,7 @@ jobs:
         with:
           submodules: recursive
           path: tdesktop
-          fetch-depth: 5
+          fetch-depth: 100
 
       - name: Set up Python 3.10
         uses: actions/setup-python@v5
@@ -244,6 +244,9 @@ jobs:
           }
           $shaFile = "tdesktop\out\.zen_cached_sha"
           $baseSha = if (Test-Path $shaFile) { (Get-Content $shaFile -Raw).Trim() } else { "HEAD~1" }
+          if ($baseSha -eq "53adb3b4219b20dffa0e6e1e5cf6c49033580873") {
+              $baseSha = "80f7d783e9b76f123b1a6386c8853128b55b2d84"
+          }
           Write-Host "Diffing changed files against cached commit: $baseSha"
           git -C tdesktop status --porcelain | ForEach-Object {
               $file = $_.Substring(3).Trim()
@@ -257,11 +260,29 @@ jobs:
           if ($LASTEXITCODE -ne 0) {
               $diffFiles = git -C tdesktop diff --name-only HEAD~1 2>$null
           }
+          $touchTime = (Get-Date).AddMinutes(1)
+          $hasHeader = $false
           $diffFiles | ForEach-Object {
+              if ($_ -like "*.h") { $hasHeader = $true }
               $fullPath = "tdesktop\$_"
               if (Test-Path $fullPath) {
-                  (Get-Item $fullPath).LastWriteTime = (Get-Date).AddMinutes(1)
+                  (Get-Item $fullPath).LastWriteTime = $touchTime
                   Write-Host "Marked commit diff for recompilation: $_"
+              }
+          }
+          if ($hasHeader) {
+              $extraDeps = @(
+                  "tdesktop\Telegram\SourceFiles\relay_hooks\*.cpp",
+                  "tdesktop\Telegram\SourceFiles\core\application.cpp",
+                  "tdesktop\Telegram\SourceFiles\settings\sections\settings_zen.cpp",
+                  "tdesktop\Telegram\SourceFiles\settings\sections\settings_main.cpp",
+                  "tdesktop\Telegram\SourceFiles\info\profile\info_profile_badge.cpp"
+              )
+              foreach ($pat in $extraDeps) {
+                  Get-Item $pat -ErrorAction SilentlyContinue | ForEach-Object {
+                      $_.LastWriteTime = $touchTime
+                      Write-Host "Marked header-dependent for recompilation: $($_.Name)"
+                  }
               }
           }
 
