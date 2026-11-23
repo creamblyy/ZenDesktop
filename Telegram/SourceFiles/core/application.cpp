@@ -14,6 +14,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include <QtGui/QWheelEvent>
 #include <QtWidgets/QAbstractScrollArea>
 #include <QtWidgets/QScrollBar>
+#include <algorithm>
+#include <cmath>
 
 #include "data/data_abstract_structure.h"
 #include "data/data_channel.h"
@@ -85,6 +87,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "window/notifications_manager.h"
 #include "window/themes/window_theme.h"
 #include "ui/widgets/tooltip.h"
+#include "ui/widgets/scroll_area.h"
 #include "ui/gl/gl_detection.h"
 #include "ui/text/text_options.h"
 #include "ui/effects/spoiler_mess.h"
@@ -158,6 +161,98 @@ base::options::toggle OptionSkipUrlSchemeRegister({
 	.name = "Skip URL scheme register",
 	.description = "Don't re-register tg:// URL scheme on autoupdate.",
 });
+
+struct GlobalSmoothScrollState {
+	QPointer<Ui::ScrollArea> uiArea;
+	QPointer<QAbstractScrollArea> qtArea;
+	double remaining = 0.0;
+	int lastSetTop = -1;
+	QTimer timer;
+};
+
+void ResetSmoothScroll(GlobalSmoothScrollState &state) {
+	state.remaining = 0.0;
+	state.lastSetTop = -1;
+	state.uiArea = nullptr;
+	state.qtArea = nullptr;
+	if (state.timer.isActive()) {
+		state.timer.stop();
+	}
+}
+
+[[nodiscard]] GlobalSmoothScrollState &SmoothScrollState() {
+	static GlobalSmoothScrollState state;
+	static const auto init = [&] {
+		state.timer.setTimerType(Qt::PreciseTimer);
+		state.timer.setInterval(8);
+		QObject::connect(&state.timer, &QTimer::timeout, [] {
+			auto readRange = [&](int &cur, int &minV, int &maxV) -> bool {
+				if (state.uiArea) {
+					cur = state.uiArea->scrollTop();
+					minV = 0;
+					maxV = state.uiArea->scrollTopMax();
+					return true;
+				}
+				if (state.qtArea) {
+					if (const auto bar = state.qtArea->verticalScrollBar()) {
+						cur = bar->value();
+						minV = bar->minimum();
+						maxV = bar->maximum();
+						return true;
+					}
+				}
+				return false;
+			};
+
+			auto curTop = 0;
+			auto minTop = 0;
+			auto maxTop = 0;
+			if (!readRange(curTop, minTop, maxTop)
+				|| maxTop <= minTop
+				|| std::abs(state.remaining) < 0.4
+				|| (state.lastSetTop >= 0
+					&& std::abs(curTop - state.lastSetTop) > 4)) {
+				ResetSmoothScroll(state);
+				return;
+			}
+
+			auto step = state.remaining * 0.16;
+			if (std::abs(step) < 1.0) {
+				step = (state.remaining > 0.0)
+					? std::min(1.0, state.remaining)
+					: std::max(-1.0, state.remaining);
+			}
+			const auto pixelStep = int(std::round(step));
+			if (pixelStep == 0) {
+				ResetSmoothScroll(state);
+				return;
+			}
+
+			const auto nextVal = std::clamp(curTop - pixelStep, minTop, maxTop);
+			if (nextVal == curTop) {
+				ResetSmoothScroll(state);
+				return;
+			}
+
+			if (state.uiArea) {
+				state.uiArea->scrollToY(nextVal);
+			} else if (state.qtArea) {
+				if (const auto bar = state.qtArea->verticalScrollBar()) {
+					bar->setValue(nextVal);
+				}
+			}
+			state.lastSetTop = nextVal;
+			state.remaining -= pixelStep;
+		});
+		return true;
+	}();
+	(void)init;
+	return state;
+}
+
+void CancelSmoothScroll() {
+	ResetSmoothScroll(SmoothScrollState());
+}
 
 } // namespace
 
@@ -743,6 +838,7 @@ bool Application::hideMediaView() {
 bool Application::eventFilter(QObject *object, QEvent *e) {
 	switch (e->type()) {
 	case QEvent::KeyPress: {
+		CancelSmoothScroll();
 		updateNonIdle();
 		_inAppKeyPressed.fire({});
 		const auto event = static_cast<QKeyEvent*>(e);
@@ -757,6 +853,7 @@ bool Application::eventFilter(QObject *object, QEvent *e) {
 	} break;
 	case QEvent::MouseButtonPress:
 	case QEvent::TouchBegin: {
+		CancelSmoothScroll();
 		updateNonIdle();
 	} break;
 	case QEvent::Wheel: {
@@ -765,80 +862,60 @@ bool Application::eventFilter(QObject *object, QEvent *e) {
 			&& object
 			&& object->isWidgetType()) {
 			const auto ev = static_cast<QWheelEvent*>(e);
-			if (ev->source() == Qt::MouseEventNotSynthesized
+			const auto dy = ev->angleDelta().y();
+			const auto dx = ev->angleDelta().x();
+			const auto hasTouchpadPixels = !ev->pixelDelta().isNull()
+				&& (ev->phase() != Qt::NoScrollPhase);
+			if (ev->source() != Qt::MouseEventSynthesizedByApplication
 				&& ev->modifiers() == Qt::NoModifier
-				&& ev->pixelDelta().isNull()
-				&& ev->angleDelta().y() != 0) {
-				const auto dy = ev->angleDelta().y();
-				QAbstractScrollArea *scrollArea = nullptr;
-				for (auto w = static_cast<QWidget*>(object); w; w = w->parentWidget()) {
-					if (const auto area = qobject_cast<QAbstractScrollArea*>(w)) {
+				&& !hasTouchpadPixels
+				&& dy != 0
+				&& std::abs(dy) >= std::abs(dx)) {
+				Ui::ScrollArea *foundUiArea = nullptr;
+				QAbstractScrollArea *foundQtArea = nullptr;
+				auto curTop = 0;
+				const auto startWidget = static_cast<QWidget*>(object);
+				for (auto w = startWidget; w; w = w->parentWidget()) {
+					if (const auto area = dynamic_cast<Ui::ScrollArea*>(w)) {
+						const auto maxTop = area->scrollTopMax();
+						const auto top = area->scrollTop();
+						if (maxTop > 0
+							&& ((dy > 0 && top > 0)
+								|| (dy < 0 && top < maxTop))) {
+							foundUiArea = area;
+							curTop = top;
+							break;
+						}
+					} else if (const auto area = qobject_cast<QAbstractScrollArea*>(w)) {
 						if (const auto bar = area->verticalScrollBar()) {
 							if (bar->maximum() > bar->minimum()
 								&& ((dy > 0 && bar->value() > bar->minimum())
 									|| (dy < 0 && bar->value() < bar->maximum()))) {
-								scrollArea = area;
+								foundQtArea = area;
+								curTop = bar->value();
 								break;
 							}
 						}
 					}
-				}
-				if (scrollArea) {
-					struct SmoothScrollState {
-						QPointer<QAbstractScrollArea> area;
-						double remaining = 0.0;
-						QTimer timer;
-					};
-					static SmoothScrollState State;
-					static const auto Init = [&] {
-						State.timer.setInterval(10);
-						QObject::connect(&State.timer, &QTimer::timeout, [] {
-							if (!State.area || std::abs(State.remaining) < 0.5) {
-								State.remaining = 0.0;
-								State.timer.stop();
-								return;
-							}
-							const auto bar = State.area->verticalScrollBar();
-							if (!bar || bar->maximum() <= bar->minimum()) {
-								State.remaining = 0.0;
-								State.timer.stop();
-								return;
-							}
-							auto step = State.remaining * 0.22;
-							if (std::abs(step) < 1.0) {
-								step = (State.remaining > 0)
-									? std::min(1.0, State.remaining)
-									: std::max(-1.0, State.remaining);
-							}
-							const auto pixelStep = int(std::round(step));
-							if (pixelStep == 0) {
-								State.remaining = 0.0;
-								State.timer.stop();
-								return;
-							}
-							const auto nextVal = std::clamp(
-								bar->value() - pixelStep,
-								bar->minimum(),
-								bar->maximum());
-							if (nextVal == bar->value()) {
-								State.remaining = 0.0;
-								State.timer.stop();
-								return;
-							}
-							bar->setValue(nextVal);
-							State.remaining -= pixelStep;
-						});
-						return true;
-					}();
-					(void)Init;
-
-					if (State.area != scrollArea) {
-						State.remaining = 0.0;
-						State.area = scrollArea;
+					if (w != startWidget && w->isWindow()) {
+						break;
 					}
-					State.remaining += dy * 0.85;
-					if (!State.timer.isActive()) {
-						State.timer.start();
+				}
+				if (foundUiArea || foundQtArea) {
+					auto &state = SmoothScrollState();
+					if (state.uiArea.data() != foundUiArea
+						|| state.qtArea.data() != foundQtArea) {
+						state.remaining = 0.0;
+						state.uiArea = foundUiArea;
+						state.qtArea = foundQtArea;
+						state.lastSetTop = curTop;
+					}
+					state.remaining = std::clamp(
+						state.remaining + dy * 0.95,
+						-2400.0,
+						2400.0);
+					if (!state.timer.isActive()) {
+						state.timer.start();
 					}
 					return true;
 				}
