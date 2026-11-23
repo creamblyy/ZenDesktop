@@ -927,9 +927,9 @@ void Zen::setupContent() {
 	const auto count = int(cards.size());
 	const auto rows = 4;
 	const auto cardHeight = 72;
-	const auto skip = 8;
+	const auto skip = 2;
 	const auto otherHeight = 52;
-	const auto totalHeight = rows * cardHeight + (rows - 1) * skip + 10 + otherHeight;
+	const auto totalHeight = rows * cardHeight + (rows - 1) * skip + 8 + otherHeight;
 
 	auto result = object_ptr<Ui::FixedHeightWidget>(content, totalHeight);
 	const auto grid = result.data();
@@ -956,7 +956,7 @@ void Zen::setupContent() {
 		if (index == 8) {
 			return QRect(
 				0,
-				rows * (cardHeight + skip) + 8,
+				rows * cardHeight + (rows - 1) * skip + 8,
 				grid->width(),
 				otherHeight);
 		}
@@ -988,7 +988,8 @@ void Zen::setupContent() {
 				int(a.blue() + (b.blue() - a.blue()) * k));
 		};
 		const auto md3Card = mix(st::windowBg->c, st::windowFg->c, 0.055);
-		const auto md3Tile = mix(md3Card, st::windowBgActive->c, 0.22);
+		const auto md3Tile = mix(md3Card, st::windowFg->c, 0.085);
+		const auto iconColor = mix(st::windowSubTextFg->c, st::windowFg->c, 0.25);
 		const auto radius = 12.0;
 		const auto tileSize = 38;
 		const auto iconSize = 23;
@@ -1009,7 +1010,7 @@ void Zen::setupContent() {
 						&q,
 						QRectF(0, 0, iconSize, iconSize));
 					q.setCompositionMode(QPainter::CompositionMode_SourceIn);
-					q.fillRect(QRect(0, 0, iconSize, iconSize), QColor(255, 255, 255));
+					q.fillRect(QRect(0, 0, iconSize, iconSize), iconColor);
 				}
 				state->icons[i] = std::move(img);
 			}
@@ -1020,8 +1021,26 @@ void Zen::setupContent() {
 		// Paint 8 grid cards
 		for (auto i = 0; i < count; ++i) {
 			const auto rect = cardRect(i);
+			const auto rtl = (i == 0) ? 14.0 : 4.0;
+			const auto rtr = (i == 1) ? 14.0 : 4.0;
+			const auto rbl = (i == 6) ? 14.0 : 4.0;
+			const auto rbr = (i == 7) ? 14.0 : 4.0;
+			const auto x1 = double(rect.x());
+			const auto y1 = double(rect.y());
+			const auto x2 = double(rect.x() + rect.width());
+			const auto y2 = double(rect.y() + rect.height());
+
 			auto path = QPainterPath();
-			path.addRoundedRect(QRectF(rect), radius, radius);
+			path.moveTo(x1 + rtl, y1);
+			path.lineTo(x2 - rtr, y1);
+			path.arcTo(QRectF(x2 - 2.0 * rtr, y1, 2.0 * rtr, 2.0 * rtr), 90.0, -90.0);
+			path.lineTo(x2, y2 - rbr);
+			path.arcTo(QRectF(x2 - 2.0 * rbr, y2 - 2.0 * rbr, 2.0 * rbr, 2.0 * rbr), 0.0, -90.0);
+			path.lineTo(x1 + rbl, y2);
+			path.arcTo(QRectF(x1, y2 - 2.0 * rbl, 2.0 * rbl, 2.0 * rbl), 270.0, -90.0);
+			path.lineTo(x1, y1 + rtl);
+			path.arcTo(QRectF(x1, y1, 2.0 * rtl, 2.0 * rtl), 180.0, -90.0);
+			path.closeSubpath();
 
 			p.setPen(Qt::NoPen);
 			p.fillPath(path, md3Card);
@@ -1043,8 +1062,8 @@ void Zen::setupContent() {
 				rect.y() + (rect.height() - tileSize) / 2,
 				tileSize,
 				tileSize);
-			p.setBrush(cards[i].color.isValid() ? cards[i].color : md3Tile);
-			p.drawRoundedRect(QRectF(tileRect), 10.0, 10.0);
+			p.setBrush(md3Tile);
+			p.drawRoundedRect(QRectF(tileRect), 11.0, 11.0);
 
 			// SVG Icon inside tile
 			if (!state->icons[i].isNull()) {
