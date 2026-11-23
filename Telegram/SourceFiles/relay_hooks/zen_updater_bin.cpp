@@ -215,11 +215,14 @@ bool CopyWithRetries(const std::wstring &src, const std::wstring &dst, int attem
 	return false;
 }
 
-bool LaunchBinary(const std::wstring &exePath) {
+bool LaunchBinary(const std::wstring &exePath, const std::wstring &extraArgs = {}) {
 	STARTUPINFOW si{};
 	si.cb = sizeof(si);
 	PROCESS_INFORMATION pi{};
 	std::wstring cmdLine = L"\"" + exePath + L"\"";
+	if (!extraArgs.empty()) {
+		cmdLine += L" " + extraArgs;
+	}
 	if (!CreateProcessW(
 			exePath.c_str(),
 			cmdLine.data(),
@@ -266,7 +269,11 @@ std::wstring BuildTempUpdatePath() {
 	return std::wstring(tempDir, len) + L"ZenDesktop_update.exe";
 }
 
-int RunApplyMode(DWORD pid, const std::wstring &source, const std::wstring &target) {
+int RunApplyMode(
+		DWORD pid,
+		const std::wstring &source,
+		const std::wstring &target,
+		const std::wstring &extraArgs = {}) {
 	if (pid != 0) {
 		HANDLE proc = OpenProcess(SYNCHRONIZE, FALSE, pid);
 		if (proc) {
@@ -286,7 +293,7 @@ int RunApplyMode(DWORD pid, const std::wstring &source, const std::wstring &targ
 	}
 
 	DeleteFileW(source.c_str());
-	LaunchBinary(target);
+	LaunchBinary(target, extraArgs);
 	return 0;
 }
 
@@ -377,9 +384,38 @@ int APIENTRY wWinMain(HINSTANCE, HINSTANCE, LPWSTR, int) {
 	DWORD pid = 0;
 	std::wstring source;
 	std::wstring target;
+	std::wstring extraArgs;
+
+	auto quoteArg = [](const std::wstring &arg) {
+		if (arg.find_first_of(L" \t\"") == std::wstring::npos && !arg.empty()) {
+			return arg;
+		}
+		std::wstring out = L"\"";
+		for (wchar_t ch : arg) {
+			if (ch == L'"') {
+				out += L"\\\"";
+			} else {
+				out += ch;
+			}
+		}
+		out += L"\"";
+		return out;
+	};
 
 	if (argv) {
-		for (int i = 1; i + 1 < argc; ++i) {
+		for (int i = 1; i < argc; ++i) {
+			if (wcscmp(argv[i], L"--") == 0) {
+				for (int j = i + 1; j < argc; ++j) {
+					if (!extraArgs.empty()) {
+						extraArgs += L" ";
+					}
+					extraArgs += quoteArg(argv[j]);
+				}
+				break;
+			}
+			if (i + 1 >= argc) {
+				break;
+			}
 			if (wcscmp(argv[i], L"--pid") == 0) {
 				pid = static_cast<DWORD>(_wtoi(argv[++i]));
 			} else if (wcscmp(argv[i], L"--source") == 0) {
@@ -392,7 +428,7 @@ int APIENTRY wWinMain(HINSTANCE, HINSTANCE, LPWSTR, int) {
 	}
 
 	if (!source.empty() && !target.empty()) {
-		return RunApplyMode(pid, source, target);
+		return RunApplyMode(pid, source, target, extraArgs);
 	}
 	return RunInteractiveCheck();
 }

@@ -2,11 +2,22 @@
 This file is part of Telegram Desktop fork - ZenDesktop with RelayHooks.
 */
 #include "relay_hooks/zen_updater.h"
+#include "relay_hooks/zen_badges.h"
 #include "logs.h"
+#include "lang/lang_keys.h"
 #include "window/window_session_controller.h"
 #include "ui/boxes/confirm_box.h"
+#include "ui/layers/generic_box.h"
+#include "ui/painter.h"
 #include "ui/ui_utility.h"
+#include "ui/widgets/labels.h"
+#include "ui/wrap/slide_wrap.h"
+#include "ui/wrap/vertical_layout.h"
+#include "styles/style_boxes.h"
+#include "styles/style_layers.h"
 
+#include <functional>
+#include <memory>
 #include <QtCore/QCoreApplication>
 #include <QtCore/QDir>
 #include <QtCore/QFile>
@@ -14,8 +25,11 @@ This file is part of Telegram Desktop fork - ZenDesktop with RelayHooks.
 #include <QtCore/QJsonArray>
 #include <QtCore/QJsonDocument>
 #include <QtCore/QJsonObject>
+#include <QtCore/QPointer>
 #include <QtCore/QProcess>
 #include <QtCore/QStandardPaths>
+#include <QtGui/QPainter>
+#include <QtGui/QPainterPath>
 #include <QtNetwork/QNetworkRequest>
 
 namespace Relay {
@@ -184,31 +198,253 @@ void ZenUpdater::showUpdateModal(const ZenUpdateInfo &info) {
 		return;
 	}
 
-	QString changes;
-	if (!info.changelog.isEmpty()) {
-		changes = "\n\nЧто нового:\n";
-		for (const auto &ch : info.changelog) {
-			changes += QString("• %1\n").arg(ch);
+	const auto logoImg = ZenBadges::Instance().getBadgeImage(ZenBadgeType::Desktop);
+
+	_controller->show(Box([this, info, logoImg](not_null<Ui::GenericBox*> box) {
+		box->setWidth(st::boxWideWidth);
+		box->setNoContentMargin(true);
+
+		const auto layout = box->verticalLayout();
+		const auto cardWidth = st::boxWideWidth - 40;
+
+		// Hero header card
+		auto header = object_ptr<Ui::RpWidget>(layout);
+		const auto rawHeader = header.data();
+		rawHeader->resize(cardWidth, 88);
+		rawHeader->setNaturalWidth(cardWidth);
+		rawHeader->paintRequest() | rpl::on_next([=] {
+			auto p = QPainter(rawHeader);
+			p.setRenderHint(QPainter::Antialiasing);
+			p.setRenderHint(QPainter::SmoothPixmapTransform);
+
+			const auto rect = QRectF(rawHeader->rect());
+			QLinearGradient grad(rect.topLeft(), rect.bottomRight());
+			grad.setColorAt(0.0, QColor(0x2b, 0x3c, 0xff));
+			grad.setColorAt(1.0, QColor(0x4b, 0x5f, 0xff));
+			p.setPen(Qt::NoPen);
+			p.setBrush(grad);
+			p.drawRoundedRect(rect, 14.0, 14.0);
+
+			// Subtle icon backdrop circle + logo
+			const QRectF badgeCircle(16.0, 17.0, 54.0, 54.0);
+			p.setBrush(QColor(255, 255, 255, 38));
+			p.drawEllipse(badgeCircle);
+			if (!logoImg.isNull()) {
+				p.drawImage(QRectF(23.0, 24.0, 40.0, 40.0), logoImg);
+			}
+
+			// Title + subtitle
+			const auto titleFont = st::boxTitle.style.font;
+			p.setFont(titleFont);
+			p.setPen(QColor(255, 255, 255));
+			p.drawText(
+				QRectF(82.0, 18.0, rect.width() - 96.0, 26.0),
+				Qt::AlignLeft | Qt::AlignVCenter,
+				QString::fromUtf8("Обновление ZenDesktop"));
+
+			// Version pill: v1.0.0 -> v1.0.1
+			const auto pillText = QString("v%1  →  v%2")
+				.arg(kZenVersion)
+				.arg(info.version);
+			const auto subFont = st::defaultFlatLabel.style.font->semibold();
+			const auto textW = subFont->width(pillText);
+			const QRectF pillRect(82.0, 48.0, textW + 20.0, 22.0);
+			p.setBrush(QColor(255, 255, 255, 44));
+			p.drawRoundedRect(pillRect, 11.0, 11.0);
+			p.setFont(subFont);
+			p.setPen(QColor(244, 239, 230));
+			p.drawText(pillRect, Qt::AlignCenter, pillText);
+		}, rawHeader->lifetime());
+		layout->add(std::move(header), QMargins(20, 18, 20, 12));
+
+		// Changelog card
+		auto card = object_ptr<Ui::RpWidget>(layout);
+		const auto rawCard = card.data();
+		rawCard->paintRequest() | rpl::on_next([=] {
+			auto p = QPainter(rawCard);
+			p.setRenderHint(QPainter::Antialiasing);
+			auto bg = st::windowFg->c;
+			bg.setAlphaF(0.05);
+			auto border = st::windowFg->c;
+			border.setAlphaF(0.09);
+			p.setBrush(bg);
+			p.setPen(QPen(border, 1.0));
+			p.drawRoundedRect(QRectF(rawCard->rect()).adjusted(0.5, 0.5, -0.5, -0.5), 12.0, 12.0);
+		}, rawCard->lifetime());
+
+		const auto cardLayout = Ui::CreateChild<Ui::VerticalLayout>(rawCard);
+		const auto cardTitle = cardLayout->add(
+			object_ptr<Ui::FlatLabel>(
+				cardLayout,
+				rpl::single(QString::fromUtf8("Что нового")),
+				st::boxLabel),
+			QMargins(16, 12, 16, 6));
+		cardTitle->setTextColorOverride(st::windowSubTextFg->c);
+		cardTitle->setSelectable(false);
+
+		const auto changesList = info.changelog.isEmpty()
+			? QStringList{ QString::fromUtf8("Улучшения стабильности и производительности") }
+			: info.changelog;
+		for (int idx = 0; idx < changesList.size(); ++idx) {
+			const auto item = cardLayout->add(
+				object_ptr<Ui::FlatLabel>(
+					cardLayout,
+					rpl::single(QString("• %1").arg(changesList[idx])),
+					st::boxLabel),
+				QMargins(16, 2, 16, (idx + 1 == changesList.size()) ? 14 : 4));
+			item->resizeToWidth(cardWidth - 32);
+			item->setSelectable(false);
 		}
-	}
+		cardLayout->resizeToWidth(cardWidth);
+		rawCard->resize(cardWidth, cardLayout->height());
+		rawCard->setNaturalWidth(cardWidth);
+		layout->add(std::move(card), QMargins(20, 0, 20, 10));
 
-	const auto text = QString(
-		"Доступна новая версия ZenDesktop %1!\n"
-		"Текущая версия: %2%3\n\n"
-		"Загрузить и установить обновление сейчас?")
-		.arg(info.version)
-		.arg(kZenVersion)
-		.arg(changes);
+		// Hidden-until-download progress section
+		const auto progressRatio = std::make_shared<double>(0.0);
+		const auto activeReply = std::make_shared<QPointer<QNetworkReply>>();
 
-	_controller->show(Ui::MakeConfirmBox({
-		.text = text,
-		.confirmed = [this, info] {
-			downloadAndInstall(info);
-		},
-		.cancelled = [] {},
-		.confirmText = "Обновить",
-		.cancelText = "Позже",
-		.title = "Обновление ZenDesktop",
+		auto progressWrapObj = object_ptr<Ui::SlideWrap<Ui::VerticalLayout>>(
+			layout,
+			object_ptr<Ui::VerticalLayout>(layout));
+		const auto progressWrap = progressWrapObj.data();
+		const auto progressLayout = progressWrap->entity();
+
+		const auto statusLabel = progressLayout->add(
+			object_ptr<Ui::FlatLabel>(
+				progressLayout,
+				rpl::single(QString::fromUtf8("Подготовка к загрузке...")),
+				st::defaultFlatLabel),
+			QMargins(20, 4, 20, 6));
+		statusLabel->resizeToWidth(cardWidth);
+		statusLabel->setSelectable(false);
+
+		auto bar = object_ptr<Ui::RpWidget>(progressLayout);
+		const auto rawBar = bar.data();
+		rawBar->resize(cardWidth, 8);
+		rawBar->setNaturalWidth(cardWidth);
+		rawBar->paintRequest() | rpl::on_next([=] {
+			auto p = QPainter(rawBar);
+			p.setRenderHint(QPainter::Antialiasing);
+			const auto r = QRectF(rawBar->rect());
+			auto track = st::windowFg->c;
+			track.setAlphaF(0.10);
+			p.setPen(Qt::NoPen);
+			p.setBrush(track);
+			p.drawRoundedRect(r, 4.0, 4.0);
+
+			const auto w = std::max(0.0, std::min(1.0, *progressRatio)) * r.width();
+			if (w > 1.0) {
+				const QRectF fillRect(0.0, 0.0, w, r.height());
+				QLinearGradient g(fillRect.topLeft(), fillRect.topRight());
+				g.setColorAt(0.0, QColor(0x2b, 0x3c, 0xff));
+				g.setColorAt(1.0, QColor(0x4b, 0x5f, 0xff));
+				p.setBrush(g);
+				p.drawRoundedRect(fillRect, 4.0, 4.0);
+			}
+		}, rawBar->lifetime());
+		progressLayout->add(std::move(bar), QMargins(20, 0, 20, 12));
+
+		progressWrap->toggle(false, anim::type::instant);
+		layout->add(std::move(progressWrapObj));
+
+		const auto weakBox = QPointer<Ui::GenericBox>(box);
+		const auto startBoxDownload = std::make_shared<std::function<void()>>();
+		*startBoxDownload = [=] {
+			if (!weakBox || info.downloadUrl.isEmpty()) {
+				return;
+			}
+			*progressRatio = 0.0;
+			statusLabel->setTextColorOverride(std::nullopt);
+			statusLabel->setText(QString::fromUtf8("Подключение к серверу..."));
+			rawBar->update();
+			progressWrap->toggle(true, anim::type::normal);
+
+			weakBox->clearButtons();
+			weakBox->addButton(tr::lng_cancel(), [=] {
+				if (*activeReply) {
+					(*activeReply)->abort();
+				}
+				if (weakBox) {
+					weakBox->closeBox();
+				}
+			});
+
+			const auto tempDir = QStandardPaths::writableLocation(QStandardPaths::TempLocation);
+			const auto targetPath = QDir(tempDir).filePath("ZenDesktop_update.exe");
+			LOG(("ZenUpdater: Starting download %1 -> %2").arg(info.downloadUrl).arg(targetPath));
+
+			auto req = QNetworkRequest(QUrl(info.downloadUrl));
+			req.setAttribute(QNetworkRequest::Http2AllowedAttribute, false);
+			req.setHeader(QNetworkRequest::UserAgentHeader, QString("ZenDesktop/%1").arg(kZenVersion));
+
+			auto *reply = _net.get(req);
+			*activeReply = reply;
+
+			connect(reply, &QNetworkReply::downloadProgress, this, [=](qint64 received, qint64 total) {
+				if (!weakBox) {
+					return;
+				}
+				if (total > 0) {
+					const auto ratio = double(received) / double(total);
+					*progressRatio = ratio;
+					const auto pct = int(ratio * 100.0);
+					const auto recMb = double(received) / (1024.0 * 1024.0);
+					const auto totMb = double(total) / (1024.0 * 1024.0);
+					statusLabel->setText(QString::fromUtf8("Загрузка: %1% (%2 / %3 МБ)")
+						.arg(pct)
+						.arg(recMb, 0, 'f', 1)
+						.arg(totMb, 0, 'f', 1));
+				} else {
+					const auto recMb = double(received) / (1024.0 * 1024.0);
+					statusLabel->setText(QString::fromUtf8("Загрузка: %1 МБ").arg(recMb, 0, 'f', 1));
+				}
+				rawBar->update();
+			});
+
+			connect(reply, &QNetworkReply::finished, this, [this, reply, targetPath, weakBox, statusLabel, progressRatio, rawBar, startBoxDownload] {
+				reply->deleteLater();
+				if (reply->error() == QNetworkReply::OperationCanceledError) {
+					return;
+				}
+				if (reply->error() != QNetworkReply::NoError) {
+					LOG(("ZenUpdater: Download failed: %1").arg(reply->errorString()));
+					if (weakBox) {
+						statusLabel->setTextColorOverride(QColor(235, 87, 87));
+						statusLabel->setText(QString::fromUtf8("Ошибка загрузки: %1").arg(reply->errorString()));
+						weakBox->clearButtons();
+						weakBox->addButton(QString::fromUtf8("Повторить"), [=] { (*startBoxDownload)(); });
+						weakBox->addButton(tr::lng_close(), [=] { weakBox->closeBox(); });
+					}
+					return;
+				}
+
+				QFile outFile(targetPath);
+				if (!outFile.open(QIODevice::WriteOnly)) {
+					LOG(("ZenUpdater: Failed to open %1 for writing").arg(targetPath));
+					if (weakBox) {
+						statusLabel->setTextColorOverride(QColor(235, 87, 87));
+						statusLabel->setText(QString::fromUtf8("Не удалось сохранить временный файл обновления."));
+						weakBox->clearButtons();
+						weakBox->addButton(tr::lng_close(), [=] { weakBox->closeBox(); });
+					}
+					return;
+				}
+				outFile.write(reply->readAll());
+				outFile.close();
+
+				*progressRatio = 1.0;
+				if (weakBox) {
+					statusLabel->setText(QString::fromUtf8("Установка обновления..."));
+					rawBar->update();
+				}
+				LOG(("ZenUpdater: Download finished successfully (%1 bytes). Applying update...").arg(outFile.size()));
+				launchUpdaterAndExit(targetPath);
+			});
+		};
+
+		box->addButton(QString::fromUtf8("Обновить"), [=] { (*startBoxDownload)(); });
+		box->addButton(QString::fromUtf8("Позже"), [=] { box->closeBox(); });
 	}));
 }
 
@@ -266,9 +502,10 @@ void ZenUpdater::startDownload(const QString &url, const QString &targetPath) {
 void ZenUpdater::launchUpdaterAndExit(const QString &newExePath) {
 	const auto currentExePath = QCoreApplication::applicationFilePath();
 	const auto pid = QCoreApplication::applicationPid();
+	const auto appArgs = QCoreApplication::arguments().mid(1);
 	const auto updaterPath = QDir(QCoreApplication::applicationDirPath()).filePath("Updater.exe");
 	if (QFileInfo::exists(updaterPath)) {
-		const auto args = QStringList{
+		auto args = QStringList{
 			"--pid",
 			QString::number(pid),
 			"--source",
@@ -276,6 +513,9 @@ void ZenUpdater::launchUpdaterAndExit(const QString &newExePath) {
 			"--target",
 			QDir::toNativeSeparators(currentExePath),
 		};
+		if (!appArgs.isEmpty()) {
+			args << "--" << appArgs;
+		}
 		LOG(("ZenUpdater: Starting native updater %1 and quitting application...").arg(updaterPath));
 		if (QProcess::startDetached(updaterPath, args)) {
 			QCoreApplication::quit();
@@ -286,6 +526,16 @@ void ZenUpdater::launchUpdaterAndExit(const QString &newExePath) {
 
 	const auto tempDir = QStandardPaths::writableLocation(QStandardPaths::TempLocation);
 	const auto scriptPath = QDir(tempDir).filePath("zen_apply_update.bat");
+
+	QStringList quotedArgs;
+	for (const auto &arg : appArgs) {
+		auto escaped = arg;
+		escaped.replace('"', "\\\"");
+		quotedArgs.append(arg.contains(' ') ? QString("\"%1\"").arg(escaped) : escaped);
+	}
+	const auto joinedArgs = quotedArgs.isEmpty()
+		? QString()
+		: QString(" %1").arg(quotedArgs.join(' '));
 
 	// Batch script that waits for current process to terminate, replaces binary, and restarts it
 	QFile scriptFile(scriptPath);
@@ -301,7 +551,7 @@ void ZenUpdater::launchUpdaterAndExit(const QString &newExePath) {
 		out << ")\r\n";
 		out << QString("copy /y \"%1\" \"%2\" >nul\r\n").arg(QDir::toNativeSeparators(newExePath)).arg(QDir::toNativeSeparators(currentExePath));
 		out << QString("del \"%1\" >nul 2>&1\r\n").arg(QDir::toNativeSeparators(newExePath));
-		out << QString("start \"\" \"%1\"\r\n").arg(QDir::toNativeSeparators(currentExePath));
+		out << QString("start \"\" \"%1\"%2\r\n").arg(QDir::toNativeSeparators(currentExePath)).arg(joinedArgs);
 		out << "del \"%~f0\" >nul 2>&1\r\n";
 		scriptFile.close();
 	}
