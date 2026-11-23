@@ -2031,9 +2031,10 @@ BlockPart DetailsFiller::makeInfo() {
 	}
 	result->paintRequest() | rpl::on_next([=] {
 		std::vector<QWidget*> rows;
+		const auto minRowWidth = result->width() / 2;
 		for (auto *child : result->children()) {
 			if (auto *w = qobject_cast<QWidget*>(child)) {
-				if (!w->isHidden() && w->height() > 0) {
+				if (!w->isHidden() && w->height() > 0 && w->width() > minRowWidth) {
 					rows.push_back(w);
 				}
 			}
@@ -2048,11 +2049,12 @@ BlockPart DetailsFiller::makeInfo() {
 		auto c = st::windowFg->c;
 		c.setAlphaF(0.08);
 		const auto left = st::infoProfileLabeledPadding.left();
-		const auto lineWidth = std::max(0, result->width() - left * 2);
+		const auto right = st::infoProfileLabeledPadding.right();
+		const auto lineWidth = std::max(0, result->width() - left - right);
 		if (lineWidth > 0) {
 			for (size_t i = 0; i + 1 < rows.size(); ++i) {
 				const auto *w = rows[i];
-				p.fillRect(left, w->y() + w->height() + 1, lineWidth, 1, c);
+				p.fillRect(left, w->y() + w->height() - 3, lineWidth, 1, c);
 			}
 		}
 	}, result->lifetime());

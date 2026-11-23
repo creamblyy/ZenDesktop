@@ -59,7 +59,7 @@ not_null<Ui::SettingsButton*> AddToggle(
 void AddInsetDivider(not_null<Ui::VerticalLayout*> content, int leftMargin = 60) {
 	const auto divider = content->add(
 		object_ptr<Ui::FixedHeightWidget>(content, 1),
-		QMargins(leftMargin, 0, 0, 0));
+		QMargins(leftMargin, 0, 20, 0));
 	divider->paintRequest() | rpl::on_next([=] {
 		auto p = QPainter(divider);
 		auto c = st::windowFg->c;

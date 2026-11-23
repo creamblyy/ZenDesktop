@@ -116,7 +116,7 @@ void AddInsetDivider(
 			auto p = QPainter(raw);
 			auto c = st::windowFg->c;
 			c.setAlphaF(0.08);
-			const auto w = std::max(0, raw->width() - leftMargin - 16);
+			const auto w = std::max(0, raw->width() - leftMargin - 20);
 			if (w > 0) {
 				p.fillRect(leftMargin, 0, w, 1, c);
 			}
