@@ -41,10 +41,14 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "data/data_channel.h"
 #include "data/data_chat.h"
 #include "data/data_chat_filters.h"
+#include "data/data_document.h"
+#include "data/data_document_media.h"
+#include "data/data_file_origin.h"
 #include "data/data_folder.h"
 #include "data/data_forum.h"
 #include "data/data_forum_topic.h"
 #include "data/data_peer_values.h"
+#include "data/data_saved_music.h"
 #include "data/data_saved_sublist.h"
 #include "data/data_session.h"
 #include "data/data_user.h"
@@ -69,6 +73,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "info/profile/info_profile_text.h"
 #include "info/profile/info_profile_values.h"
 #include "info/profile/info_profile_widget.h"
+#include "info/saved/info_saved_music_widget.h"
 #include "info/info_controller.h"
 #include "info/info_memento.h"
 #include "inline_bots/bot_attach_web_view.h"
@@ -83,6 +88,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "ui/controls/userpic_button.h"
 #include "ui/effects/credits_graphics.h"
 #include "ui/effects/toggle_arrow.h"
+#include "ui/image/image.h"
 #include "ui/painter.h"
 #include "ui/rect.h"
 #include "ui/ui_utility.h"
@@ -118,6 +124,10 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 
 #include <QtGui/QGuiApplication>
 #include <QtGui/QClipboard>
+#include <QtGui/QLinearGradient>
+#include <QtGui/QPainterPath>
+#include <algorithm>
+#include <array>
 
 namespace Info {
 namespace Profile {
@@ -125,6 +135,105 @@ namespace {
 
 constexpr auto kDay = Data::WorkingInterval::kDay;
 constexpr auto kPeerIdLinkIndex = uint16(1);
+
+[[nodiscard]] std::pair<QColor, QColor> ExtractDominantCardColors(
+		const QImage &img) {
+	const auto fallback = std::pair<QColor, QColor>{
+		QColor(42, 52, 68),
+		QColor(56, 68, 88),
+	};
+	if (img.isNull()) {
+		return fallback;
+	}
+	const auto sample = img.scaled(
+		16,
+		16,
+		Qt::IgnoreAspectRatio,
+		Qt::SmoothTransformation).convertToFormat(QImage::Format_ARGB32);
+
+	auto rSum = 0.0;
+	auto gSum = 0.0;
+	auto bSum = 0.0;
+	auto wSum = 0.0;
+	for (auto y = 0; y < sample.height(); ++y) {
+		const auto line = reinterpret_cast<const QRgb*>(sample.constScanLine(y));
+		for (auto x = 0; x < sample.width(); ++x) {
+			const auto px = line[x];
+			const auto a = qAlpha(px);
+			if (a < 32) {
+				continue;
+			}
+			const auto r = qRed(px);
+			const auto g = qGreen(px);
+			const auto b = qBlue(px);
+			const auto maxC = std::max({ r, g, b });
+			const auto minC = std::min({ r, g, b });
+			const auto chroma = float64(maxC - minC) / 255.0;
+			const auto weight = (0.2 + chroma * 3.0) * (a / 255.0);
+			rSum += r * weight;
+			gSum += g * weight;
+			bSum += b * weight;
+			wSum += weight;
+		}
+	}
+	if (wSum <= 0.0) {
+		return fallback;
+	}
+	const auto avg = QColor(
+		std::clamp(int(rSum / wSum), 0, 255),
+		std::clamp(int(gSum / wSum), 0, 255),
+		std::clamp(int(bSum / wSum), 0, 255));
+	const auto h = avg.hslHueF();
+	const auto s = avg.hslSaturationF();
+	if (h < 0.0f || s < 0.12f) {
+		return fallback;
+	}
+	const auto sat = std::clamp(float(s), 0.45f, 0.78f);
+	return {
+		QColor::fromHslF(h, sat, 0.20f),
+		QColor::fromHslF(h, std::clamp(sat * 0.92f, 0.42f, 0.74f), 0.28f),
+	};
+}
+
+void DrawWatermarkedNotes(QPainter &p, const QRectF &rect) {
+	struct NotePlacement {
+		float64 xRatio;
+		float64 yRatio;
+		float64 angleDeg;
+		float64 scale;
+	};
+	constexpr std::array<NotePlacement, 5> kNotes = {{
+		{ 0.62, 0.30, -16.0, 0.92 },
+		{ 0.73, 0.74, 14.0, 0.85 },
+		{ 0.83, 0.24, -12.0, 1.00 },
+		{ 0.92, 0.72, 18.0, 0.88 },
+		{ 0.97, 0.28, -14.0, 0.82 },
+	}};
+
+	p.save();
+	p.setPen(Qt::NoPen);
+	p.setBrush(QColor(255, 255, 255, 20));
+	for (const auto &n : kNotes) {
+		p.save();
+		p.translate(rect.x() + rect.width() * n.xRatio, rect.y() + rect.height() * n.yRatio);
+		p.rotate(n.angleDeg);
+		p.scale(n.scale, n.scale);
+		// Beamed double eighth note
+		p.drawEllipse(QRectF(-8.5, 2.0, 6.0, 4.4));
+		p.drawEllipse(QRectF(1.5, 0.2, 6.0, 4.4));
+		p.drawRect(QRectF(-4.3, -9.5, 1.8, 13.5));
+		p.drawRect(QRectF(5.7, -11.3, 1.8, 13.5));
+		QPainterPath beam;
+		beam.moveTo(-4.3, -9.5);
+		beam.lineTo(7.5, -11.3);
+		beam.lineTo(7.5, -8.3);
+		beam.lineTo(-4.3, -6.5);
+		beam.closeSubpath();
+		p.drawPath(beam);
+		p.restore();
+	}
+	p.restore();
+}
 
 class DraggableUrlClickHandler final : public UrlClickHandler {
 public:
@@ -1263,6 +1372,7 @@ public:
 	void buildBlocks();
 
 private:
+	[[nodiscard]] BlockPart makeProfileMusicCard(not_null<UserData*> user);
 	[[nodiscard]] BlockPart makePersonalChannel(not_null<UserData*> user);
 	[[nodiscard]] BlockPart makeInfo();
 	[[nodiscard]] BlockPart makeAddAsContact(not_null<UserData*> user);
@@ -2273,6 +2383,237 @@ BlockPart DetailsFiller::makePersonalChannel(not_null<UserData*> user) {
 	};
 }
 
+BlockPart DetailsFiller::makeProfileMusicCard(not_null<UserData*> user) {
+	const auto parent = _blocks.layout();
+	auto wrap = object_ptr<Ui::SlideWrap<Ui::RpWidget>>(
+		parent,
+		object_ptr<Ui::RpWidget>(parent));
+	const auto rawWrap = wrap.data();
+	const auto card = rawWrap->entity();
+	const auto window = _controller->parentController();
+
+	card->setMinimumHeight(68);
+	card->setMaximumHeight(68);
+	card->resize(card->width(), 68);
+	card->setCursor(style::cur_pointer);
+
+	struct State {
+		DocumentData *doc = nullptr;
+		std::shared_ptr<Data::DocumentMedia> media;
+		QString title;
+		QString performer;
+		QColor leftColor = QColor(42, 52, 68);
+		QColor rightColor = QColor(56, 68, 88);
+		bool colorsExtracted = false;
+		bool hovered = false;
+		bool initialized = false;
+	};
+	const auto state = card->lifetime().make_state<State>();
+
+	const auto tryExtractColors = [=] {
+		if (!state->media || state->colorsExtracted) {
+			return false;
+		}
+		if (const auto thumb = state->media->thumbnail()) {
+			const auto pix = thumb->pix(
+				QSize(48, 48) * style::DevicePixelRatio());
+			if (!pix.isNull()) {
+				const auto colors = ExtractDominantCardColors(pix.toImage());
+				state->leftColor = colors.first;
+				state->rightColor = colors.second;
+				state->colorsExtracted = true;
+				return true;
+			}
+		}
+		return false;
+	};
+
+	const auto savedMusic = &user->owner().savedMusic();
+	const auto peerId = user->id;
+	rpl::single(
+		peerId
+	) | rpl::then(
+		savedMusic->changed() | rpl::filter(rpl::mappers::_1 == peerId)
+	) | rpl::on_next([=] {
+		const auto &list = savedMusic->list(peerId);
+		HistoryItem *const item = list.empty()
+			? nullptr
+			: list.front().get();
+		const auto media = item ? item->media() : nullptr;
+		const auto doc = media ? media->document() : nullptr;
+		const auto animType = state->initialized
+			? anim::type::normal
+			: anim::type::instant;
+		state->initialized = true;
+
+		if (!doc) {
+			state->doc = nullptr;
+			state->media = nullptr;
+			state->title = QString();
+			state->performer = QString();
+			state->colorsExtracted = false;
+			rawWrap->toggle(false, animType);
+			return;
+		}
+
+		if (state->doc != doc) {
+			state->doc = doc;
+			state->title = QString();
+			state->performer = QString();
+			if (const auto song = doc->song()) {
+				state->title = song->title;
+				state->performer = song->performer;
+			}
+			if (state->title.isEmpty()) {
+				state->title = doc->filename();
+			}
+			if (state->title.isEmpty()) {
+				state->title = QString::fromUtf8("Аудиозапись");
+			}
+			state->media = doc->createMediaView();
+			if (state->media) {
+				state->media->thumbnailWanted(item->fullId());
+			}
+			state->leftColor = QColor(42, 52, 68);
+			state->rightColor = QColor(56, 68, 88);
+			state->colorsExtracted = false;
+			tryExtractColors();
+		}
+
+		rawWrap->toggle(true, animType);
+		card->update();
+	}, card->lifetime());
+	rawWrap->finishAnimating();
+
+	user->session().downloaderTaskFinished(
+	) | rpl::on_next([=] {
+		if (tryExtractColors()) {
+			card->update();
+		}
+	}, card->lifetime());
+
+	card->events() | rpl::on_next([=](not_null<QEvent*> e) {
+		switch (e->type()) {
+		case QEvent::Enter:
+			state->hovered = true;
+			card->update();
+			break;
+		case QEvent::Leave:
+			state->hovered = false;
+			card->update();
+			break;
+		case QEvent::MouseButtonRelease: {
+			const auto me = static_cast<QMouseEvent*>(e.get());
+			if (me->button() == Qt::LeftButton
+				&& card->rect().contains(me->pos())) {
+				window->showSection(Info::Saved::MakeMusic(user));
+			}
+		} break;
+		default:
+			break;
+		}
+	}, card->lifetime());
+
+	card->paintRequest() | rpl::on_next([=] {
+		auto p = QPainter(card);
+		auto hq = PainterHighQualityEnabler(p);
+		const auto cardRect = QRectF(card->rect());
+
+		QPainterPath cardPath;
+		cardPath.addRoundedRect(cardRect, 16., 16.);
+		p.setClipPath(cardPath);
+
+		QLinearGradient grad(cardRect.topLeft(), cardRect.topRight());
+		grad.setColorAt(0.0, state->leftColor);
+		grad.setColorAt(1.0, state->rightColor);
+		p.fillRect(cardRect, grad);
+
+		DrawWatermarkedNotes(p, cardRect);
+
+		if (state->hovered) {
+			p.fillRect(cardRect, QColor(255, 255, 255, 14));
+		}
+
+		const auto coverRect = QRect(10, 10, 48, 48);
+		p.save();
+		QPainterPath coverPath;
+		coverPath.addRoundedRect(QRectF(coverRect), 10., 10.);
+		p.setClipPath(coverPath);
+		auto drawnCover = false;
+		if (state->media) {
+			if (const auto thumb = state->media->thumbnail()) {
+				const auto pix = thumb->pix(
+					QSize(48, 48) * style::DevicePixelRatio());
+				if (!pix.isNull()) {
+					const auto pixSize = pix.size();
+					const auto side = std::min(pixSize.width(), pixSize.height());
+					const auto srcRect = QRect(
+						(pixSize.width() - side) / 2,
+						(pixSize.height() - side) / 2,
+						side,
+						side);
+					p.drawPixmap(coverRect, pix, srcRect);
+					drawnCover = true;
+				}
+			}
+		}
+		if (!drawnCover) {
+			p.fillRect(coverRect, QColor(0, 0, 0, 72));
+			p.setPen(Qt::NoPen);
+			p.setBrush(QColor(255, 255, 255, 210));
+			p.translate(coverRect.center());
+			p.drawEllipse(QRectF(-7.5, 1.5, 5.5, 4.0));
+			p.drawEllipse(QRectF(1.0, 0.0, 5.5, 4.0));
+			p.drawRect(QRectF(-3.7, -8.5, 1.7, 12.0));
+			p.drawRect(QRectF(4.8, -10.0, 1.7, 12.0));
+			QPainterPath noteBeam;
+			noteBeam.moveTo(-3.7, -8.5);
+			noteBeam.lineTo(6.5, -10.0);
+			noteBeam.lineTo(6.5, -7.2);
+			noteBeam.lineTo(-3.7, -5.7);
+			noteBeam.closeSubpath();
+			p.drawPath(noteBeam);
+		}
+		p.restore();
+
+		const auto textLeft = 68;
+		const auto textWidth = std::max(40, card->width() - textLeft - 16);
+		const auto hasPerformer = !state->performer.isEmpty();
+		const auto titleTop = hasPerformer
+			? 13
+			: ((card->height() - st::semiboldFont->height) / 2);
+
+		p.setFont(st::semiboldFont);
+		p.setPen(QColor(255, 255, 255));
+		const auto elidedTitle = st::semiboldFont->metrics().elidedText(
+			state->title,
+			Qt::ElideRight,
+			textWidth);
+		p.drawText(
+			QRect(textLeft, titleTop, textWidth, st::semiboldFont->height),
+			Qt::AlignLeft | Qt::AlignVCenter,
+			elidedTitle);
+
+		if (hasPerformer) {
+			p.setFont(st::normalFont);
+			p.setPen(QColor(255, 255, 255, 185));
+			const auto elidedPerformer = st::normalFont->metrics().elidedText(
+				state->performer,
+				Qt::ElideRight,
+				textWidth);
+			p.drawText(
+				QRect(textLeft, 36, textWidth, st::normalFont->height),
+				Qt::AlignLeft | Qt::AlignVCenter,
+				elidedPerformer);
+		}
+	}, card->lifetime());
+
+	return BlockPart{
+		.widget = std::move(wrap),
+		.shown = rawWrap->toggledValue(),
+	};
+}
+
 void DetailsFiller::addMainApp(not_null<UserData*> user) {
 	const auto parent = _blocks.layout();
 	auto wrap = object_ptr<Ui::SlideWrap<Ui::VerticalLayout>>(
@@ -2798,6 +3139,8 @@ void DetailsFiller::buildBlocks() {
 	Expects(!_topic || !_topic->creating());
 
 	if (const auto user = _sublist ? nullptr : _peer->asUser()) {
+		_blocks.add(makeProfileMusicCard(user));
+		_blocks.addSeparator();
 		_blocks.add(makePersonalChannel(user));
 		_blocks.addSeparator();
 	}

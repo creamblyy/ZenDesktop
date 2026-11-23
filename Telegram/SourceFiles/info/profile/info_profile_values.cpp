@@ -135,9 +135,6 @@ rpl::producer<TextWithEntities> PhoneValue(not_null<UserData*> user) {
 			user,
 			UpdateFlag::PhoneNumber) | rpl::to_empty
 	) | rpl::map([=] {
-		if (user->isSelf() && Relay::RelayHooks::Instance().isHidePhoneNumberEnabled()) {
-			return tr::marked(u"+* *** ***-**-**"_q);
-		}
 		return tr::marked(Ui::FormatPhone(user->phone()));
 	});
 }
@@ -178,7 +175,7 @@ rpl::producer<TextWithEntities> PhoneWithSpoilerValue(
 		std::move(phone),
 		user->session().settings().phoneNumberHiddenValue()
 	) | rpl::map([](const TextWithEntities &phone, bool hidden) {
-		return hidden
+		return (hidden || Relay::RelayHooks::Instance().isHidePhoneNumberEnabled())
 			? Ui::Text::Wrapped(phone, EntityType::Spoiler)
 			: phone;
 	});

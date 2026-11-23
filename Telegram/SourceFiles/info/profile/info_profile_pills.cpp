@@ -78,12 +78,8 @@ PillsRow::PillsRow(
 	ProfileMusicValue(
 		user
 	) | rpl::on_next([=](DocumentData *document) {
-		if (document) {
-			music->updateData({ Ui::Text::FormatSongNameFor(document) });
-			music->show();
-		} else {
-			music->hide();
-		}
+		(void)document;
+		music->hide();
 	}, _lifetime);
 
 	// Without the action buttons the row fits the gap below the status.
