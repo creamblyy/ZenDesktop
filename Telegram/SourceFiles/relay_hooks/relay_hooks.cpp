@@ -239,6 +239,176 @@ void RelayHooks::markMessageDeleted(uint64_t peerId, int32_t messageId) {
 	}
 }
 
+bool RelayHooks::isEditHistoryEnabled() const {
+	return _editHistoryEnabled;
+}
+
+void RelayHooks::setEditHistoryEnabled(bool enabled) {
+	_editHistoryEnabled = enabled;
+	saveSettings();
+}
+
+void RelayHooks::recordMessageEdit(
+		uint64_t peerId,
+		int32_t messageId,
+		const QString &oldText,
+		int64_t timestamp) {
+	if (!_editHistoryEnabled || oldText.trimmed().isEmpty()) {
+		return;
+	}
+	if (_editHistory.size() > 4000) {
+		_editHistory.erase(_editHistory.begin());
+	}
+	auto &list = _editHistory[MakeMessageKey(peerId, messageId)];
+	if (!list.empty() && list.back().text == oldText) {
+		return;
+	}
+	list.push_back(ZenEditEntry{ .text = oldText, .timestamp = timestamp });
+}
+
+std::vector<ZenEditEntry> RelayHooks::getMessageEdits(uint64_t peerId, int32_t messageId) const {
+	const auto it = _editHistory.find(MakeMessageKey(peerId, messageId));
+	if (it != _editHistory.end()) {
+		return it->second;
+	}
+	return {};
+}
+
+bool RelayHooks::isStripExifEnabled() const {
+	return _stripExifEnabled;
+}
+
+void RelayHooks::setStripExifEnabled(bool enabled) {
+	_stripExifEnabled = enabled;
+	saveSettings();
+}
+
+int RelayHooks::bubbleRadiusLarge() const {
+	return _bubbleRadiusLarge;
+}
+
+void RelayHooks::setBubbleRadiusLarge(int radius) {
+	_bubbleRadiusLarge = std::clamp(radius, 4, 24);
+	saveSettings();
+}
+
+int RelayHooks::bubbleRadiusSmall() const {
+	return _bubbleRadiusSmall;
+}
+
+void RelayHooks::setBubbleRadiusSmall(int radius) {
+	_bubbleRadiusSmall = std::clamp(radius, 2, 16);
+	saveSettings();
+}
+
+int RelayHooks::messageLineSpacing() const {
+	return _messageLineSpacing;
+}
+
+void RelayHooks::setMessageLineSpacing(int spacing) {
+	_messageLineSpacing = std::clamp(spacing, 0, 8);
+	saveSettings();
+}
+
+bool RelayHooks::isLocalTranscribeEnabled() const {
+	return _localTranscribeEnabled;
+}
+
+void RelayHooks::setLocalTranscribeEnabled(bool enabled) {
+	_localTranscribeEnabled = enabled;
+	saveSettings();
+}
+
+QString RelayHooks::whisperApiUrl() const {
+	return _whisperApiUrl;
+}
+
+void RelayHooks::setWhisperApiUrl(const QString &url) {
+	_whisperApiUrl = url.trimmed();
+	saveSettings();
+}
+
+QString RelayHooks::whisperApiKey() const {
+	return _whisperApiKey;
+}
+
+void RelayHooks::setWhisperApiKey(const QString &key) {
+	_whisperApiKey = key.trimmed();
+	saveSettings();
+}
+
+bool RelayHooks::isSmartCacheEnabled() const {
+	return _smartCacheEnabled;
+}
+
+void RelayHooks::setSmartCacheEnabled(bool enabled) {
+	_smartCacheEnabled = enabled;
+	saveSettings();
+}
+
+int RelayHooks::smartCacheMaxDays() const {
+	return _smartCacheMaxDays;
+}
+
+void RelayHooks::setSmartCacheMaxDays(int days) {
+	_smartCacheMaxDays = std::clamp(days, 1, 90);
+	saveSettings();
+}
+
+bool RelayHooks::smartCacheCleanStickers() const {
+	return _smartCacheCleanStickers;
+}
+
+void RelayHooks::setSmartCacheCleanStickers(bool enabled) {
+	_smartCacheCleanStickers = enabled;
+	saveSettings();
+}
+
+bool RelayHooks::smartCacheCleanVoiceRounds() const {
+	return _smartCacheCleanVoiceRounds;
+}
+
+void RelayHooks::setSmartCacheCleanVoiceRounds(bool enabled) {
+	_smartCacheCleanVoiceRounds = enabled;
+	saveSettings();
+}
+
+bool RelayHooks::smartCacheCleanVideo() const {
+	return _smartCacheCleanVideo;
+}
+
+void RelayHooks::setSmartCacheCleanVideo(bool enabled) {
+	_smartCacheCleanVideo = enabled;
+	saveSettings();
+}
+
+bool RelayHooks::smartCacheCleanMedia() const {
+	return _smartCacheCleanMedia;
+}
+
+void RelayHooks::setSmartCacheCleanMedia(bool enabled) {
+	_smartCacheCleanMedia = enabled;
+	saveSettings();
+}
+
+int RelayHooks::smartCacheRamLimitMb() const {
+	return _smartCacheRamLimitMb;
+}
+
+void RelayHooks::setSmartCacheRamLimitMb(int mb) {
+	_smartCacheRamLimitMb = std::clamp(mb, 128, 4096);
+	saveSettings();
+}
+
+bool RelayHooks::isQuickProxyEnabled() const {
+	return _quickProxyEnabled;
+}
+
+void RelayHooks::setQuickProxyEnabled(bool enabled) {
+	_quickProxyEnabled = enabled;
+	saveSettings();
+}
+
 bool RelayHooks::isDownloadBoostEnabled() const {
 	return _downloadBoost;
 }
@@ -303,6 +473,22 @@ void RelayHooks::loadSettings() {
 	_material3Icons = s.value("material3_icons", true).toBool();
 	_downloadBoost = s.value("download_boost", true).toBool();
 	_wsProxy = s.value("ws_proxy", false).toBool();
+	_quickProxyEnabled = s.value("quick_proxy", true).toBool();
+	_editHistoryEnabled = s.value("edit_history", true).toBool();
+	_stripExifEnabled = s.value("strip_exif", true).toBool();
+	_bubbleRadiusLarge = std::clamp(s.value("bubble_radius_large", 15).toInt(), 4, 24);
+	_bubbleRadiusSmall = std::clamp(s.value("bubble_radius_small", 6).toInt(), 2, 16);
+	_messageLineSpacing = std::clamp(s.value("message_line_spacing", 0).toInt(), 0, 8);
+	_localTranscribeEnabled = s.value("local_transcribe", true).toBool();
+	_whisperApiUrl = s.value("whisper_api_url", QString()).toString();
+	_whisperApiKey = s.value("whisper_api_key", QString()).toString();
+	_smartCacheEnabled = s.value("smart_cache_enabled", false).toBool();
+	_smartCacheMaxDays = std::clamp(s.value("smart_cache_max_days", 7).toInt(), 1, 90);
+	_smartCacheCleanStickers = s.value("smart_cache_stickers", true).toBool();
+	_smartCacheCleanVoiceRounds = s.value("smart_cache_voice_rounds", true).toBool();
+	_smartCacheCleanVideo = s.value("smart_cache_video", true).toBool();
+	_smartCacheCleanMedia = s.value("smart_cache_media", false).toBool();
+	_smartCacheRamLimitMb = std::clamp(s.value("smart_cache_ram_mb", 512).toInt(), 128, 4096);
 	_autoUpdateMode = static_cast<AutoUpdateMode>(s.value("auto_update_mode", 0).toInt());
 }
 
@@ -329,6 +515,22 @@ void RelayHooks::saveSettings() {
 	s.setValue("material3_icons", _material3Icons);
 	s.setValue("download_boost", _downloadBoost);
 	s.setValue("ws_proxy", _wsProxy);
+	s.setValue("quick_proxy", _quickProxyEnabled);
+	s.setValue("edit_history", _editHistoryEnabled);
+	s.setValue("strip_exif", _stripExifEnabled);
+	s.setValue("bubble_radius_large", _bubbleRadiusLarge);
+	s.setValue("bubble_radius_small", _bubbleRadiusSmall);
+	s.setValue("message_line_spacing", _messageLineSpacing);
+	s.setValue("local_transcribe", _localTranscribeEnabled);
+	s.setValue("whisper_api_url", _whisperApiUrl);
+	s.setValue("whisper_api_key", _whisperApiKey);
+	s.setValue("smart_cache_enabled", _smartCacheEnabled);
+	s.setValue("smart_cache_max_days", _smartCacheMaxDays);
+	s.setValue("smart_cache_stickers", _smartCacheCleanStickers);
+	s.setValue("smart_cache_voice_rounds", _smartCacheCleanVoiceRounds);
+	s.setValue("smart_cache_video", _smartCacheCleanVideo);
+	s.setValue("smart_cache_media", _smartCacheCleanMedia);
+	s.setValue("smart_cache_ram_mb", _smartCacheRamLimitMb);
 	s.setValue("auto_update_mode", static_cast<int>(_autoUpdateMode));
 }
 

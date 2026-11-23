@@ -8,6 +8,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "history/history_item.h"
 
 #include "api/api_premium.h"
+#include "relay_hooks/relay_hooks.h"
+#include "base/unixtime.h"
 #include "api/api_sensitive_content.h"
 #include "api/api_transcribes.h"
 #include "lang/lang_keys.h"
@@ -2500,6 +2502,18 @@ void HistoryItem::applyEdition(HistoryMessageEdition &&edition) {
 	const auto mediaCheck = edition.mtpMedia
 		? CheckMessageMedia(*edition.mtpMedia)
 		: MediaCheckResult::Good;
+	if (Relay::RelayHooks::Instance().isEditHistoryEnabled()
+		&& !updatingSavedLocalEdit
+		&& !isLocal()) {
+		const auto prevText = originalText().text;
+		if (!prevText.isEmpty() && prevText != updatedText.text) {
+			Relay::RelayHooks::Instance().recordMessageEdit(
+				history()->peer->id.value,
+				id.bare,
+				prevText,
+				(edition.editDate > 0) ? edition.editDate : base::unixtime::now());
+		}
+	}
 	if (updatingSavedLocalEdit) {
 		Get<HistoryMessageSavedMediaData>()->media
 			= (mediaCheck != MediaCheckResult::Unsupported
@@ -2546,6 +2560,18 @@ void HistoryItem::applyEdition(HistoryMessageEdition &&edition) {
 			*edition.mtpMedia,
 			edition.isMediaUnread)
 		: PreparedServiceText();
+	if (Relay::RelayHooks::Instance().isEditHistoryEnabled()
+		&& !updatingSavedLocalEdit
+		&& !isLocal()) {
+		const auto prevText = originalText().text;
+		if (!prevText.isEmpty() && prevText != updatedText.text) {
+			Relay::RelayHooks::Instance().recordMessageEdit(
+				history()->peer->id.value,
+				id.bare,
+				prevText,
+				(edition.editDate > 0) ? edition.editDate : base::unixtime::now());
+		}
+	}
 	if (updatingSavedLocalEdit) {
 		Get<HistoryMessageSavedMediaData>()->text = std::move(updatedText);
 	} else if (!serviceText.text.empty()) {

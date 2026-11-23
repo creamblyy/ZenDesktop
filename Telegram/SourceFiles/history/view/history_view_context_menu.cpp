@@ -8,6 +8,14 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "history/view/history_view_context_menu.h"
 
 #include "api/api_attached_stickers.h"
+#include "relay_hooks/relay_hooks.h"
+#include "ui/layers/generic_box.h"
+#include "ui/widgets/labels.h"
+#include "ui/wrap/vertical_layout.h"
+#include "styles/style_layers.h"
+#include "styles/style_boxes.h"
+#include <QtCore/QDateTime>
+#include <QtGui/QPainter>
 #include "api/api_editing.h"
 #include "api/api_global_privacy.h"
 #include "api/api_polls.h"
@@ -1415,6 +1423,45 @@ void AddMessageActions(
 	AddSelectionAction(menu, request, list);
 	if (request.item && request.selectedItems.empty()) {
 		AddEphemeralAboutAction(menu, request.item);
+	}
+	if (request.item && request.selectedItems.empty()) {
+		const auto edits = Relay::RelayHooks::Instance().getMessageEdits(
+			request.item->history()->peer->id.value,
+			request.item->id.bare);
+		if (!edits.empty()) {
+			const auto controller = list->controller();
+			menu->addAction(
+				QString::fromUtf8("История правок (%1)").arg(edits.size()),
+				[=] {
+					controller->show(Box([=](not_null<Ui::GenericBox*> box) {
+						box->setTitle(rpl::single(QString::fromUtf8("История правок")));
+						box->setWidth(st::boxWideWidth);
+						const auto layout = box->verticalLayout();
+						for (auto i = int(edits.size()) - 1; i >= 0; --i) {
+							const auto &entry = edits[i];
+							const auto timeStr = QDateTime::fromSecsSinceEpoch(entry.timestamp)
+								.toString("dd.MM.yyyy HH:mm:ss");
+							const auto cap = layout->add(
+								object_ptr<Ui::FlatLabel>(
+									layout,
+									rpl::single(QString::fromUtf8("Версия #%1 • %2").arg(i + 1).arg(timeStr)),
+									st::defaultFlatLabel),
+								QMargins(22, 8, 22, 2));
+							cap->setTextColorOverride(st::windowSubTextFg->c);
+							const auto body = layout->add(
+								object_ptr<Ui::FlatLabel>(
+									layout,
+									rpl::single(entry.text),
+									st::boxLabel),
+								QMargins(22, 0, 22, 10));
+							body->setSelectable(true);
+							body->resizeToWidth(st::boxWideWidth - 44);
+						}
+						box->addButton(tr::lng_close(), [=] { box->closeBox(); });
+					}));
+				},
+				&st::menuIconEdit);
+		}
 	}
 	AddRescheduleAction(menu, request, list);
 }

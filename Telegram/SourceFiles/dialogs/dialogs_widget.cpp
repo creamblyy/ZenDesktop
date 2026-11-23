@@ -6,6 +6,8 @@ For license and copyright information please follow this link:
 https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "dialogs/dialogs_widget.h"
+#include "relay_hooks/relay_hooks.h"
+#include "relay_hooks/zen_quick_proxy.h"
 
 #include "base/call_delayed.h"
 #include "base/qt/qt_key_modifiers.h"
@@ -246,6 +248,7 @@ Widget::Widget(
 , _lockUnlock(
 	_searchControls,
 	object_ptr<Ui::IconButton>(this, st::dialogsLock))
+, _zenProxyBtn(_searchControls, controller)
 , _addStory(
 	_searchControls,
 	object_ptr<Ui::IconButton>(this, st::dialogsAddStory))
@@ -4654,8 +4657,16 @@ void Widget::updateControlsGeometry() {
 		? st::dialogsFilterSkip
 		: (st::dialogsFilterPadding.x() + _mainMenu.toggle->width()))
 		+ st::dialogsFilterPadding.x();
+	const auto showProxy = (_layout != Layout::Child)
+		&& (narrowRatio < 0.3)
+		&& Relay::RelayHooks::Instance().isQuickProxyEnabled();
+	if (_zenProxyBtn) {
+		_zenProxyBtn->setVisible(showProxy);
+	}
+	const auto proxyExtra = showProxy ? (_zenProxyBtn->width() + 6) : 0;
 	const auto filterRight = st::dialogsFilterSkip
-		+ st::dialogsFilterPadding.x();
+		+ st::dialogsFilterPadding.x()
+		+ proxyExtra;
 	const auto filterWidth = std::max(ratiow, smallw)
 		- filterLeft
 		- filterRight;
@@ -4675,6 +4686,11 @@ void Widget::updateControlsGeometry() {
 		filterTop,
 		filterWidth,
 		_search->height());
+	if (showProxy) {
+		_zenProxyBtn->moveToLeft(
+			filterLeft + filterWidth + 6,
+			filterTop + (_search->height() - _zenProxyBtn->height()) / 2);
+	}
 
 	auto mainMenuLeft = anim::interpolate(
 		st::dialogsFilterPadding.x(),

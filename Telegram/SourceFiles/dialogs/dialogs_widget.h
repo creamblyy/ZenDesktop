@@ -23,6 +23,10 @@ namespace MTP {
 class Error;
 } // namespace MTP
 
+namespace Relay {
+class ZenQuickProxyWidget;
+} // namespace Relay
+
 namespace Data {
 class Forum;
 class CommunityInfo;
@@ -358,6 +362,7 @@ private:
 	object_ptr<Ui::FadeWrapScaled<Ui::IconButton>> _jumpToDate;
 	object_ptr<Ui::CrossButton> _cancelSearch;
 	object_ptr<Ui::FadeWrapScaled<Ui::IconButton>> _lockUnlock;
+	object_ptr<Relay::ZenQuickProxyWidget> _zenProxyBtn;
 	object_ptr<Ui::FadeWrapScaled<Ui::IconButton>> _addStory;
 
 	std::unique_ptr<Ui::MoreChatsBar> _moreChatsBar;

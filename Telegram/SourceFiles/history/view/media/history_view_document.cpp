@@ -23,6 +23,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "history/view/history_view_message.h"
 #include "history/view/history_view_cursor_state.h"
 #include "history/view/history_view_transcribe_button.h"
+#include "relay_hooks/relay_hooks.h"
 #include "history/view/media/history_view_media_common.h"
 #include "ui/text/format_values.h"
 #include "ui/text/format_song_document_name.h"
@@ -499,14 +500,17 @@ QSize Document::countOptimalSize() {
 		const auto session = &history->session();
 		const auto transcribes = &session->api().transcribes();
 		const auto media = _parent->data()->media();
+		const auto localTranscribe = Relay::RelayHooks::Instance().isLocalTranscribeEnabled();
 		if ((media && media->ttlSeconds())
 			|| IsHostedInstantViewMedia(_parent)
 			|| _realParent->isScheduled()
 			|| _realParent->isAdminLogEntry()
-			|| (!session->premium()
+			|| (!localTranscribe
+				&& !session->premium()
 				&& !transcribes->freeFor(_realParent)
 				&& !transcribes->trialsSupport())
-			|| (!session->premium()
+			|| (!localTranscribe
+				&& !session->premium()
 				&& _data->duration() > transcribes->trialsMaxLengthMs())) {
 			voice->transcribe = nullptr;
 			voice->transcribeText = {};

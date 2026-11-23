@@ -6,6 +6,8 @@ For license and copyright information please follow this link:
 https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "storage/localimageloader.h"
+#include "relay_hooks/relay_hooks.h"
+#include <QtCore/QtEndian>
 
 #include "api/api_text_entities.h"
 #include "api/api_sending.h"
@@ -62,6 +64,121 @@ struct PreparedFileThumbnail {
 	QByteArray bytes;
 	MTPPhotoSize mtpSize = MTP_photoSizeEmpty(MTP_string());
 };
+
+namespace {
+
+bool StripImageMetadata(const QByteArray &in, QByteArray &out) {
+	const auto n = in.size();
+	if (n < 12) {
+		return false;
+	}
+	const auto *d = reinterpret_cast<const uchar*>(in.constData());
+
+	// 1) JPEG: strip APP1..APP15 (0xE1..0xEF, EXIF/XMP/IPTC) and COM (0xFE)
+	if (d[0] == 0xFF && d[1] == 0xD8) {
+		out.clear();
+		out.reserve(n);
+		out.append(in.constData(), 2);
+		int pos = 2;
+		bool changed = false;
+		while (pos + 2 <= n) {
+			if (d[pos] != 0xFF) {
+				out.append(in.constData() + pos, n - pos);
+				return changed;
+			}
+			while (pos < n && d[pos] == 0xFF) {
+				++pos;
+			}
+			if (pos >= n) {
+				break;
+			}
+			const uchar marker = d[pos++];
+			if (marker == 0xD9 || marker == 0xDA) { // EOI or SOS (image data follows)
+				out.append(char(0xFF));
+				out.append(char(marker));
+				out.append(in.constData() + pos, n - pos);
+				return changed;
+			}
+			if (marker == 0x00 || (marker >= 0xD0 && marker <= 0xD7) || marker == 0x01) {
+				out.append(char(0xFF));
+				out.append(char(marker));
+				continue;
+			}
+			if (pos + 2 > n) {
+				return false;
+			}
+			const int segLen = (int(d[pos]) << 8) | int(d[pos + 1]);
+			if (segLen < 2 || pos + segLen > n) {
+				return false;
+			}
+			if ((marker >= 0xE1 && marker <= 0xEF) || marker == 0xFE) {
+				changed = true;
+			} else {
+				out.append(char(0xFF));
+				out.append(char(marker));
+				out.append(in.constData() + pos, segLen);
+			}
+			pos += segLen;
+		}
+		return changed;
+	}
+
+	// 2) PNG: strip eXIf, tEXt, zTXt, iTXt, tIME chunks
+	static constexpr uchar kPngSig[8] = { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A };
+	if (memcmp(d, kPngSig, 8) == 0) {
+		out.clear();
+		out.reserve(n);
+		out.append(in.constData(), 8);
+		int pos = 8;
+		bool changed = false;
+		while (pos + 12 <= n) {
+			const quint32 len = qFromBigEndian<quint32>(d + pos);
+			if (quint64(pos) + 12ULL + quint64(len) > quint64(n)) {
+				return false;
+			}
+			const QByteArray tag(in.constData() + pos + 4, 4);
+			if (tag == "eXIf" || tag == "tEXt" || tag == "zTXt" || tag == "iTXt" || tag == "tIME") {
+				changed = true;
+			} else {
+				out.append(in.constData() + pos, 12 + int(len));
+			}
+			pos += 12 + int(len);
+		}
+		return changed;
+	}
+
+	// 3) WebP: strip EXIF and XMP chunks in RIFF container
+	if (memcmp(d, "RIFF", 4) == 0 && memcmp(d + 8, "WEBP", 4) == 0) {
+		out.clear();
+		out.reserve(n);
+		out.append(in.constData(), 12);
+		int pos = 12;
+		bool changed = false;
+		while (pos + 8 <= n) {
+			const quint32 csize = qFromLittleEndian<quint32>(d + pos + 4);
+			const quint32 padded = csize + (csize & 1U);
+			if (quint64(pos) + 8ULL + quint64(padded) > quint64(n)) {
+				return false;
+			}
+			const QByteArray tag(in.constData() + pos, 4);
+			if (tag == "EXIF" || tag == "XMP ") {
+				changed = true;
+			} else {
+				out.append(in.constData() + pos, 8 + int(padded));
+			}
+			pos += 8 + int(padded);
+		}
+		if (changed && out.size() >= 12) {
+			const quint32 riffSize = quint32(out.size() - 8);
+			qToLittleEndian(riffSize, reinterpret_cast<uchar*>(out.data()) + 4);
+		}
+		return changed;
+	}
+
+	return false;
+}
+
+} // namespace
 
 [[nodiscard]] PreparedFileThumbnail PrepareFileThumbnail(QImage &&original) {
 	const auto width = original.width();
@@ -1245,6 +1362,22 @@ void FileLoadTask::process(ProcessArgs &&args) {
 				_result->attachedStickers = documents
 					| ranges::views::transform(&DocumentData::mtpInput)
 					| ranges::to_vector;
+			}
+		}
+	}
+
+	if (_type == SendMediaType::File
+		&& Relay::RelayHooks::Instance().isStripExifEnabled()
+		&& _content.isEmpty()
+		&& !_filepath.isEmpty()) {
+		QFile f(_filepath);
+		if (f.size() > 0 && f.size() <= 64 * 1024 * 1024 && f.open(QIODevice::ReadOnly)) {
+			const auto raw = f.readAll();
+			QByteArray cleaned;
+			if (StripImageMetadata(raw, cleaned)) {
+				_content = std::move(cleaned);
+				_filepath.clear();
+				_result->filesize = _content.size();
 			}
 		}
 	}

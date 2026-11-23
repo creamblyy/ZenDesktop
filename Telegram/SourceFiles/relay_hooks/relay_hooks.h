@@ -21,6 +21,11 @@ enum class AutoUpdateMode : int {
 	AutoInstall = 2,
 };
 
+struct ZenEditEntry {
+	QString text;
+	int64_t timestamp = 0;
+};
+
 struct HookStats {
 	uint64_t deletedMessagesIntercepted = 0;
 	uint64_t typingBlocked = 0;
@@ -102,9 +107,50 @@ public:
 	[[nodiscard]] bool isMaterial3IconsEnabled() const;
 	void setMaterial3IconsEnabled(bool enabled);
 
-	// Anti-Recall Visual State
+	// Anti-Recall & Edit History
 	[[nodiscard]] bool isMessageDeleted(uint64_t peerId, int32_t messageId) const;
 	void markMessageDeleted(uint64_t peerId, int32_t messageId);
+
+	[[nodiscard]] bool isEditHistoryEnabled() const;
+	void setEditHistoryEnabled(bool enabled);
+	void recordMessageEdit(uint64_t peerId, int32_t messageId, const QString &oldText, int64_t timestamp);
+	[[nodiscard]] std::vector<ZenEditEntry> getMessageEdits(uint64_t peerId, int32_t messageId) const;
+
+	// Privacy: EXIF stripping
+	[[nodiscard]] bool isStripExifEnabled() const;
+	void setStripExifEnabled(bool enabled);
+
+	// Appearance: Bubble radius & spacing
+	[[nodiscard]] int bubbleRadiusLarge() const;
+	void setBubbleRadiusLarge(int radius);
+	[[nodiscard]] int bubbleRadiusSmall() const;
+	void setBubbleRadiusSmall(int radius);
+	[[nodiscard]] int messageLineSpacing() const;
+	void setMessageLineSpacing(int spacing);
+
+	// Voice & Round Transcribe
+	[[nodiscard]] bool isLocalTranscribeEnabled() const;
+	void setLocalTranscribeEnabled(bool enabled);
+	[[nodiscard]] QString whisperApiUrl() const;
+	void setWhisperApiUrl(const QString &url);
+	[[nodiscard]] QString whisperApiKey() const;
+	void setWhisperApiKey(const QString &key);
+
+	// Smart Cache
+	[[nodiscard]] bool isSmartCacheEnabled() const;
+	void setSmartCacheEnabled(bool enabled);
+	[[nodiscard]] int smartCacheMaxDays() const;
+	void setSmartCacheMaxDays(int days);
+	[[nodiscard]] bool smartCacheCleanStickers() const;
+	void setSmartCacheCleanStickers(bool enabled);
+	[[nodiscard]] bool smartCacheCleanVoiceRounds() const;
+	void setSmartCacheCleanVoiceRounds(bool enabled);
+	[[nodiscard]] bool smartCacheCleanVideo() const;
+	void setSmartCacheCleanVideo(bool enabled);
+	[[nodiscard]] bool smartCacheCleanMedia() const;
+	void setSmartCacheCleanMedia(bool enabled);
+	[[nodiscard]] int smartCacheRamLimitMb() const;
+	void setSmartCacheRamLimitMb(int mb);
 
 	// Network
 	[[nodiscard]] bool isDownloadBoostEnabled() const;
@@ -112,6 +158,9 @@ public:
 
 	[[nodiscard]] bool isWsProxyEnabled() const;
 	void setWsProxyEnabled(bool enabled);
+
+	[[nodiscard]] bool isQuickProxyEnabled() const;
+	void setQuickProxyEnabled(bool enabled);
 
 	// Updates & Backup
 	[[nodiscard]] AutoUpdateMode autoUpdateMode() const;
@@ -170,9 +219,26 @@ private:
 	bool _material3Icons = true;
 	bool _downloadBoost = true; // Boost enabled by default
 	bool _wsProxy = false;
+	bool _quickProxyEnabled = true;
+	bool _editHistoryEnabled = true;
+	bool _stripExifEnabled = true;
+	int _bubbleRadiusLarge = 15;
+	int _bubbleRadiusSmall = 6;
+	int _messageLineSpacing = 0;
+	bool _localTranscribeEnabled = true;
+	QString _whisperApiUrl;
+	QString _whisperApiKey;
+	bool _smartCacheEnabled = false;
+	int _smartCacheMaxDays = 7;
+	bool _smartCacheCleanStickers = true;
+	bool _smartCacheCleanVoiceRounds = true;
+	bool _smartCacheCleanVideo = true;
+	bool _smartCacheCleanMedia = false;
+	int _smartCacheRamLimitMb = 512;
 	AutoUpdateMode _autoUpdateMode = AutoUpdateMode::DownloadOnly;
 
 	std::unordered_set<uint64_t> _deletedMessages;
+	std::unordered_map<uint64_t, std::vector<ZenEditEntry>> _editHistory;
 	HookStats _stats;
 
 	std::unordered_map<std::string, DeleteHookFn> _deleteHooks;

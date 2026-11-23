@@ -144,6 +144,10 @@ PRIVATE
     relay_hooks/zen_updater.h
     relay_hooks/zen_lyrics_box.cpp
     relay_hooks/zen_lyrics_box.h
+    relay_hooks/zen_quick_proxy.cpp
+    relay_hooks/zen_quick_proxy.h
+    relay_hooks/zen_transcriber.cpp
+    relay_hooks/zen_transcriber.h
     relay_hooks/zen_ws_proxy.cpp
     relay_hooks/zen_ws_proxy.h
 

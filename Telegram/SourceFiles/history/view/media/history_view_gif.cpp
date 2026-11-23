@@ -33,6 +33,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "history/view/history_view_cursor_state.h"
 #include "history/view/history_view_reply.h"
 #include "history/view/history_view_transcribe_button.h"
+#include "relay_hooks/relay_hooks.h"
 #include "history/view/media/history_view_document.h" // TTLVoiceStops
 #include "history/view/media/history_view_ephemeral_plate.h"
 #include "history/view/media/history_view_media_common.h"
@@ -2728,7 +2729,8 @@ void Gif::ensureTranscribeButton() const {
 		&& !_parent->data()->isAdminLogEntry()
 		&& (_parent->context() != Context::MediaEditor)
 		&& (_data->session().premium()
-			|| _data->session().api().transcribes().trialsSupport())) {
+			|| _data->session().api().transcribes().trialsSupport()
+			|| Relay::RelayHooks::Instance().isLocalTranscribeEnabled())) {
 		if (!_transcribe) {
 			_transcribe = std::make_unique<TranscribeButton>(
 				_realParent,

@@ -9,6 +9,10 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 
 #include "relay_hooks/zen_badges.h"
 #include "relay_hooks/zen_updater.h"
+#include "relay_hooks/relay_hooks.h"
+#include "data/data_session.h"
+#include "storage/cache/storage_cache_database.h"
+#include "storage/storage_account.h"
 #include "apiwrap.h"
 #include "api/api_cloud_password.h"
 #include "api/api_text_entities.h"
@@ -1780,6 +1784,16 @@ SessionController::SessionController(
 		Media::Stories::SetupStoryPostToasts(this);
 		Relay::ZenUpdater::Instance().init(this);
 		Relay::ZenBadges::Instance().syncFromRemote(nullptr);
+		if (Relay::RelayHooks::Instance().isSmartCacheEnabled()) {
+			const auto days = Relay::RelayHooks::Instance().smartCacheMaxDays();
+			const auto limitBytes = int64(Relay::RelayHooks::Instance().smartCacheRamLimitMb()) * 1024LL * 1024LL;
+			auto update = Storage::Cache::Database::SettingsUpdate();
+			update.totalTimeLimit = TimeId(days) * 86400;
+			update.totalSizeLimit = limitBytes;
+			auto updateBig = update;
+			session->local().updateCacheSettings(update, updateBig);
+			session->data().cache().updateSettings(update);
+		}
 	}
 	style::PaletteChanged(
 	) | rpl::on_next([=] {

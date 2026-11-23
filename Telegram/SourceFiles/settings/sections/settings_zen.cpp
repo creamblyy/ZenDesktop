@@ -9,10 +9,30 @@ This file is part of Telegram Desktop fork - ZenDesktop with RelayHooks.
 #include "relay_hooks/zen_updater.h"
 #include "relay_hooks/zen_badges.h"
 #include "relay_hooks/zen_ws_proxy.h"
+#include "relay_hooks/zen_transcriber.h"
 #include "base/call_delayed.h"
 #include "base/weak_ptr.h"
+#include "core/application.h"
+#include "core/core_settings.h"
 #include "core/version.h"
 #include "core/file_utilities.h"
+#include "data/data_session.h"
+#include "data/data_file_origin.h"
+#include "main/main_session.h"
+#include "storage/storage_account.h"
+#include "storage/cache/storage_cache_database.h"
+#include "storage/localstorage.h"
+#include "ui/boxes/choose_font_box.h"
+#include "window/themes/window_theme.h"
+#include "window/section_widget.h"
+#include "lang/lang_keys.h"
+#include "styles/style_boxes.h"
+#include "styles/style_layers.h"
+#include <QtCore/QDir>
+#include <QtCore/QFile>
+#include <QtNetwork/QNetworkAccessManager>
+#include <QtNetwork/QNetworkReply>
+#include <QtNetwork/QNetworkRequest>
 #include "ui/vertical_list.h"
 #include "ui/wrap/vertical_layout.h"
 #include "ui/widgets/checkbox.h"
@@ -56,7 +76,7 @@ not_null<Ui::SettingsButton*> AddToggle(
 }
 
 // Inset divider (M3 style: 1px line inset aligned with text)
-void AddInsetDivider(not_null<Ui::VerticalLayout*> content, int leftMargin = 60) {
+void AddInsetDivider(not_null<Ui::VerticalLayout*> content, int leftMargin = st::settingsButton.padding.left()) {
 	const auto divider = content->add(
 		object_ptr<Ui::FixedHeightWidget>(content, 1),
 		QMargins(leftMargin, 0, 20, 0));
@@ -364,7 +384,7 @@ void ZenPrivacy::setupContent() {
 		typingStream->events_starting_with(hooks.isTypingHidden()),
 		&st::menuIconEdit);
 
-	AddInsetDivider(content, 60);
+	AddInsetDivider(content);
 
 	const auto readToggle = AddToggle(
 		content,
@@ -372,7 +392,7 @@ void ZenPrivacy::setupContent() {
 		readStream->events_starting_with(hooks.isReadHistoryHidden()),
 		&st::menuIconShowInChat);
 
-	AddInsetDivider(content, 60);
+	AddInsetDivider(content);
 
 	const auto storiesToggle = AddToggle(
 		content,
@@ -435,7 +455,7 @@ void ZenPrivacy::setupContent() {
 		rpl::single(hooks.isHidePhoneNumberEnabled()),
 		&st::menuIconPermissions);
 
-	AddInsetDivider(content, 60);
+	AddInsetDivider(content);
 
 	const auto hideSensitiveToggle = AddToggle(
 		content,
@@ -443,7 +463,7 @@ void ZenPrivacy::setupContent() {
 		rpl::single(hooks.isHideSensitiveMediaEnabled()),
 		&st::menuIconShowInChat);
 
-	AddInsetDivider(content, 60);
+	AddInsetDivider(content);
 
 	const auto streamerToggle = AddToggle(
 		content,
@@ -478,6 +498,39 @@ void ZenPrivacy::setupContent() {
 	streamerToggle->toggledChanges(
 	) | rpl::on_next([=](bool checked) {
 		Relay::RelayHooks::Instance().setStreamerModeEnabled(checked);
+	}, lifetime);
+
+	Ui::AddSkip(content);
+	Ui::AddDivider(content);
+	Ui::AddSkip(content);
+	Ui::AddSubsectionTitle(content, rpl::single(QString::fromUtf8("История правок и метаданные")));
+
+	const auto editHistoryToggle = AddToggle(
+		content,
+		rpl::single(QString::fromUtf8("История правок сообщений")),
+		rpl::single(hooks.isEditHistoryEnabled()),
+		&st::menuIconEdit);
+
+	AddInsetDivider(content);
+
+	const auto stripExifToggle = AddToggle(
+		content,
+		rpl::single(QString::fromUtf8("Очищать EXIF и метаданные при отправке")),
+		rpl::single(hooks.isStripExifEnabled()),
+		&st::menuIconLock);
+
+	Ui::AddDividerText(
+		content,
+		rpl::single(QString::fromUtf8("Сохраняет старые версии отредактированных сообщений собеседника (доступны в контекстном меню) и вырезает EXIF/GPS/XMP из JPEG, PNG и WebP при отправке как файл.")));
+
+	editHistoryToggle->toggledChanges(
+	) | rpl::on_next([=](bool checked) {
+		Relay::RelayHooks::Instance().setEditHistoryEnabled(checked);
+	}, lifetime);
+
+	stripExifToggle->toggledChanges(
+	) | rpl::on_next([=](bool checked) {
+		Relay::RelayHooks::Instance().setStripExifEnabled(checked);
 	}, lifetime);
 
 	Ui::ResizeFitChild(this, content);
@@ -524,7 +577,7 @@ void ZenAppearance::setupContent() {
 		rpl::single(hooks.isSwissMotionEnabled()),
 		&st::menuIconFave);
 
-	AddInsetDivider(content, 60);
+	AddInsetDivider(content);
 
 	const auto secondsToggle = AddToggle(
 		content,
@@ -532,7 +585,7 @@ void ZenAppearance::setupContent() {
 		rpl::single(hooks.isShowSecondsEnabled()),
 		&st::menuIconEdit);
 
-	AddInsetDivider(content, 60);
+	AddInsetDivider(content);
 
 	const auto hideMuteToggle = AddToggle(
 		content,
@@ -540,7 +593,7 @@ void ZenAppearance::setupContent() {
 		rpl::single(hooks.isHideMuteIconEnabled()),
 		&st::menuIconArchive);
 
-	AddInsetDivider(content, 60);
+	AddInsetDivider(content);
 
 	const auto customBubbleToggle = AddToggle(
 		content,
@@ -585,6 +638,111 @@ void ZenAppearance::setupContent() {
 		Relay::RelayHooks::Instance().setCleanStickersEnabled(checked);
 	}, lifetime);
 
+	Ui::AddSkip(content);
+	Ui::AddDivider(content);
+	Ui::AddSkip(content);
+	Ui::AddSubsectionTitle(content, rpl::single(QString::fromUtf8("Шрифт и скругления баблов")));
+
+	const auto fontFamilyVar = content->lifetime().make_state<rpl::variable<QString>>(
+		Core::App().settings().customFontFamily());
+	const auto fontBtn = AddButtonWithLabel(
+		content,
+		rpl::single(QString::fromUtf8("Шрифт интерфейса")),
+		fontFamilyVar->value() | rpl::map([](const QString &f) {
+			return f.isEmpty()
+				? QString::fromUtf8("По умолчанию")
+				: (f == style::SystemFontTag())
+				? QString::fromUtf8("Системный")
+				: f;
+		}),
+		st::settingsButton,
+		{ &st::menuIconFont });
+	const auto fontThemeLifetime = content->lifetime().make_state<rpl::lifetime>();
+	const auto ctrl = controller();
+	fontBtn->setClickedCallback([=] {
+		const auto save = [=](QString chosen) {
+			*fontFamilyVar = chosen;
+			Core::App().settings().setCustomFontFamily(chosen);
+			Local::writeSettings();
+			Core::Restart();
+		};
+		fontThemeLifetime->destroy();
+		const auto theme = std::shared_ptr<Ui::ChatTheme>(
+			Window::Theme::DefaultChatThemeOn(*fontThemeLifetime));
+		const auto generateBg = [=] {
+			const auto size = st::boxWidth;
+			const auto ratio = style::DevicePixelRatio();
+			auto result = QImage(
+				QSize(size, size) * ratio,
+				QImage::Format_ARGB32_Premultiplied);
+			auto p = QPainter(&result);
+			Window::SectionWidget::PaintBackground(
+				p,
+				theme.get(),
+				QSize(size, size * 3),
+				QRect(0, 0, size, size));
+			p.end();
+			return result;
+		};
+		ctrl->show(Box(Ui::ChooseFontBox, generateBg, fontFamilyVar->current(), save));
+	});
+
+	AddInsetDivider(content);
+
+	const auto largeRadiusVar = content->lifetime().make_state<rpl::variable<int>>(
+		hooks.bubbleRadiusLarge());
+	const auto largeRadiusBtn = AddButtonWithLabel(
+		content,
+		rpl::single(QString::fromUtf8("Скругление баблов сообщений")),
+		largeRadiusVar->value() | rpl::map([](int r) {
+			return QString("%1 px").arg(r);
+		}),
+		st::settingsButton,
+		{ &st::menuIconChatBubble });
+	largeRadiusBtn->setClickedCallback([=] {
+		static constexpr int kOptions[] = { 8, 12, 15, 18, 22 };
+		const auto cur = largeRadiusVar->current();
+		int next = kOptions[0];
+		for (int i = 0; i < 5; ++i) {
+			if (kOptions[i] == cur) {
+				next = kOptions[(i + 1) % 5];
+				break;
+			}
+		}
+		Relay::RelayHooks::Instance().setBubbleRadiusLarge(next);
+		*largeRadiusVar = next;
+	});
+
+	AddInsetDivider(content);
+
+	const auto smallRadiusVar = content->lifetime().make_state<rpl::variable<int>>(
+		hooks.bubbleRadiusSmall());
+	const auto smallRadiusBtn = AddButtonWithLabel(
+		content,
+		rpl::single(QString::fromUtf8("Скругление углов группы")),
+		smallRadiusVar->value() | rpl::map([](int r) {
+			return QString("%1 px").arg(r);
+		}),
+		st::settingsButton,
+		{ &st::menuIconChatBubble });
+	smallRadiusBtn->setClickedCallback([=] {
+		static constexpr int kSmallOptions[] = { 4, 6, 8, 10 };
+		const auto cur = smallRadiusVar->current();
+		int next = kSmallOptions[0];
+		for (int i = 0; i < 4; ++i) {
+			if (kSmallOptions[i] == cur) {
+				next = kSmallOptions[(i + 1) % 4];
+				break;
+			}
+		}
+		Relay::RelayHooks::Instance().setBubbleRadiusSmall(next);
+		*smallRadiusVar = next;
+	});
+
+	Ui::AddDividerText(
+		content,
+		rpl::single(QString::fromUtf8("Изменение скругления баблов применится ко всем новым и обновляемым сообщениям (для полного обновления всего кэша баблов перезапустите клиент).")));
+
 	Ui::ResizeFitChild(this, content);
 	AttachZenSectionTransition(this, content);
 }
@@ -627,7 +785,7 @@ void ZenMessages::setupContent() {
 		rpl::single(true),
 		&st::menuIconEdit);
 
-	AddInsetDivider(content, 60);
+	AddInsetDivider(content);
 
 	const auto quickReactions = AddToggle(
 		content,
@@ -635,7 +793,7 @@ void ZenMessages::setupContent() {
 		rpl::single(true),
 		&st::menuIconReactions);
 
-	AddInsetDivider(content, 60);
+	AddInsetDivider(content);
 
 	const auto directDownload = AddToggle(
 		content,
@@ -689,7 +847,7 @@ void ZenTranslate::setupContent() {
 		rpl::single(true),
 		&st::menuIconShowInChat);
 
-	AddInsetDivider(content, 60);
+	AddInsetDivider(content);
 
 	const auto showOriginal = AddToggle(
 		content,
@@ -700,6 +858,99 @@ void ZenTranslate::setupContent() {
 	Ui::AddDividerText(
 		content,
 		rpl::single(QString::fromUtf8("Встроенный переводчик сообщений с поддержкой Google Translate, DeepL и Yandex.")));
+
+	Ui::AddSkip(content);
+	Ui::AddDivider(content);
+	Ui::AddSkip(content);
+	Ui::AddSubsectionTitle(content, rpl::single(QString::fromUtf8("Расшифровка голосовых и кружков")));
+
+	auto &hooks = Relay::RelayHooks::Instance();
+	const auto transcribeToggle = AddToggle(
+		content,
+		rpl::single(QString::fromUtf8("Расшифровка без Telegram Premium")),
+		rpl::single(hooks.isLocalTranscribeEnabled()),
+		&st::menuIconShowInChat);
+	transcribeToggle->toggledChanges(
+	) | rpl::on_next([=](bool checked) {
+		Relay::RelayHooks::Instance().setLocalTranscribeEnabled(checked);
+	}, content->lifetime());
+
+	AddInsetDivider(content);
+
+	const auto ctrl = controller();
+	const auto whisperBtn = AddButtonWithIcon(
+		content,
+		rpl::single(QString::fromUtf8("Настройки Whisper (локальная модель / API)")),
+		st::settingsButton,
+		{ .icon = &st::menuIconSettings, .type = IconType::Simple });
+	whisperBtn->setClickedCallback([=] {
+		ctrl->show(Box([=](not_null<Ui::GenericBox*> box) {
+			box->setTitle(rpl::single(QString::fromUtf8("Настройки Whisper")));
+			box->setWidth(st::boxWideWidth);
+			const auto layout = box->verticalLayout();
+
+			const auto statusText = Relay::ZenTranscriber::IsLocalWhisperReady()
+				? QString::fromUtf8("Локальный Whisper готов: %1").arg(Relay::ZenTranscriber::WhisperModelPath())
+				: QString::fromUtf8("Локальный Whisper не найден.\nПапка: %1\nПоложите туда whisper-cli.exe и модель или укажите API URL ниже.")
+					.arg(Relay::ZenTranscriber::WhisperDir());
+			const auto infoLabel = layout->add(
+				object_ptr<Ui::FlatLabel>(layout, rpl::single(statusText), st::boxLabel),
+				QMargins(22, 8, 22, 10));
+			infoLabel->resizeToWidth(st::boxWideWidth - 44);
+
+			const auto urlField = layout->add(
+				object_ptr<Ui::InputField>(
+					layout,
+					st::defaultInputField,
+					rpl::single(QString::fromUtf8("Whisper API URL (например Groq/OpenAI)")),
+					Relay::RelayHooks::Instance().whisperApiUrl()),
+				QMargins(22, 4, 22, 8));
+			const auto keyField = layout->add(
+				object_ptr<Ui::InputField>(
+					layout,
+					st::defaultInputField,
+					rpl::single(QString::fromUtf8("API Key (если требуется)")),
+					Relay::RelayHooks::Instance().whisperApiKey()),
+				QMargins(22, 4, 22, 12));
+
+			const auto dlBtn = layout->add(
+				object_ptr<Settings::Button>(
+					layout,
+					rpl::single(QString::fromUtf8("Скачать модель ggml-tiny.bin (~75 МБ)")),
+					st::settingsButtonNoIcon),
+				QMargins(0, 4, 0, 8));
+			dlBtn->setClickedCallback([=] {
+				QDir().mkpath(Relay::ZenTranscriber::WhisperDir());
+				const auto dest = QDir(Relay::ZenTranscriber::WhisperDir()).filePath("ggml-tiny.bin");
+				infoLabel->setText(QString::fromUtf8("Загрузка ggml-tiny.bin с HuggingFace..."));
+				auto *net = new QNetworkAccessManager(box);
+				auto *reply = net->get(QNetworkRequest(QUrl(
+					"https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.bin")));
+				QObject::connect(reply, &QNetworkReply::finished, box, [=] {
+					reply->deleteLater();
+					if (reply->error() != QNetworkReply::NoError) {
+						infoLabel->setText(QString::fromUtf8("Ошибка загрузки: %1").arg(reply->errorString()));
+						return;
+					}
+					QFile f(dest);
+					if (f.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+						f.write(reply->readAll());
+						f.close();
+						infoLabel->setText(QString::fromUtf8("Модель сохранена: %1").arg(dest));
+					} else {
+						infoLabel->setText(QString::fromUtf8("Не удалось записать файл модели."));
+					}
+				});
+			});
+
+			box->addButton(rpl::single(QString::fromUtf8("Сохранить")), [=] {
+				Relay::RelayHooks::Instance().setWhisperApiUrl(urlField->getLastText());
+				Relay::RelayHooks::Instance().setWhisperApiKey(keyField->getLastText());
+				box->closeBox();
+			});
+			box->addButton(tr::lng_cancel(), [=] { box->closeBox(); });
+		}));
+	});
 
 	Ui::ResizeFitChild(this, content);
 	AttachZenSectionTransition(this, content);
@@ -769,6 +1020,156 @@ void ZenNetwork::setupContent() {
 		Relay::RelayHooks::Instance().setWsProxyEnabled(checked);
 		Relay::ZenWsProxy::Instance().applyEnabled(checked);
 	}, lifetime);
+
+	AddInsetDivider(content);
+
+	const auto quickProxyToggle = AddToggle(
+		content,
+		rpl::single(QString::fromUtf8("Быстрый переключатель прокси в шапке с пингом")),
+		rpl::single(hooks.isQuickProxyEnabled()),
+		&st::menuIconShowInChat);
+	quickProxyToggle->toggledChanges(
+	) | rpl::on_next([=](bool checked) {
+		Relay::RelayHooks::Instance().setQuickProxyEnabled(checked);
+	}, lifetime);
+
+	Ui::AddSkip(content);
+	Ui::AddDivider(content);
+	Ui::AddSkip(content);
+	Ui::AddSubsectionTitle(content, rpl::single(QString::fromUtf8("Умный авто-кэш и лимит памяти")));
+
+	const auto smartCacheToggle = AddToggle(
+		content,
+		rpl::single(QString::fromUtf8("Включить умный авто-кэш при запуске")),
+		rpl::single(hooks.isSmartCacheEnabled()),
+		&st::menuIconDelete);
+	smartCacheToggle->toggledChanges(
+	) | rpl::on_next([=](bool checked) {
+		Relay::RelayHooks::Instance().setSmartCacheEnabled(checked);
+	}, lifetime);
+
+	AddInsetDivider(content);
+
+	const auto daysVar = content->lifetime().make_state<rpl::variable<int>>(hooks.smartCacheMaxDays());
+	const auto daysBtn = AddButtonWithLabel(
+		content,
+		rpl::single(QString::fromUtf8("Хранить кэш не дольше")),
+		daysVar->value() | rpl::map([](int d) {
+			return QString::fromUtf8("%1 дн.").arg(d);
+		}),
+		st::settingsButton,
+		{ &st::menuIconRestore });
+	daysBtn->setClickedCallback([=] {
+		static constexpr int kDayOpts[] = { 1, 3, 7, 14, 30 };
+		const auto cur = daysVar->current();
+		int next = kDayOpts[0];
+		for (int i = 0; i < 5; ++i) {
+			if (kDayOpts[i] == cur) {
+				next = kDayOpts[(i + 1) % 5];
+				break;
+			}
+		}
+		Relay::RelayHooks::Instance().setSmartCacheMaxDays(next);
+		*daysVar = next;
+	});
+
+	AddInsetDivider(content);
+
+	const auto limitVar = content->lifetime().make_state<rpl::variable<int>>(hooks.smartCacheRamLimitMb());
+	const auto limitBtn = AddButtonWithLabel(
+		content,
+		rpl::single(QString::fromUtf8("Мягкий лимит кэша")),
+		limitVar->value() | rpl::map([](int mb) {
+			return QString::fromUtf8("%1 МБ").arg(mb);
+		}),
+		st::settingsButton,
+		{ &st::menuIconSettings });
+	limitBtn->setClickedCallback([=] {
+		static constexpr int kLimOpts[] = { 256, 512, 1024, 2048 };
+		const auto cur = limitVar->current();
+		int next = kLimOpts[0];
+		for (int i = 0; i < 4; ++i) {
+			if (kLimOpts[i] == cur) {
+				next = kLimOpts[(i + 1) % 4];
+				break;
+			}
+		}
+		Relay::RelayHooks::Instance().setSmartCacheRamLimitMb(next);
+		*limitVar = next;
+	});
+
+	AddInsetDivider(content);
+
+	const auto stickersToggle = AddToggle(
+		content,
+		rpl::single(QString::fromUtf8("Очищать кэш стикеров")),
+		rpl::single(hooks.smartCacheCleanStickers()),
+		&st::menuIconStickers);
+	stickersToggle->toggledChanges() | rpl::on_next([=](bool c) {
+		Relay::RelayHooks::Instance().setSmartCacheCleanStickers(c);
+	}, lifetime);
+
+	AddInsetDivider(content);
+
+	const auto voiceRoundsToggle = AddToggle(
+		content,
+		rpl::single(QString::fromUtf8("Очищать голосовые и кружки")),
+		rpl::single(hooks.smartCacheCleanVoiceRounds()),
+		&st::menuIconShowInChat);
+	voiceRoundsToggle->toggledChanges() | rpl::on_next([=](bool c) {
+		Relay::RelayHooks::Instance().setSmartCacheCleanVoiceRounds(c);
+	}, lifetime);
+
+	AddInsetDivider(content);
+
+	const auto videoToggle = AddToggle(
+		content,
+		rpl::single(QString::fromUtf8("Очищать видео и GIF")),
+		rpl::single(hooks.smartCacheCleanVideo()),
+		&st::menuIconGif);
+	videoToggle->toggledChanges() | rpl::on_next([=](bool c) {
+		Relay::RelayHooks::Instance().setSmartCacheCleanVideo(c);
+	}, lifetime);
+
+	AddInsetDivider(content);
+
+	const auto mediaToggle = AddToggle(
+		content,
+		rpl::single(QString::fromUtf8("Очищать фото и файлы")),
+		rpl::single(hooks.smartCacheCleanMedia()),
+		&st::menuIconPhoto);
+	mediaToggle->toggledChanges() | rpl::on_next([=](bool c) {
+		Relay::RelayHooks::Instance().setSmartCacheCleanMedia(c);
+	}, lifetime);
+
+	AddInsetDivider(content);
+
+	const auto ctrl = controller();
+	const auto clearNowBtn = AddButtonWithIcon(
+		content,
+		rpl::single(QString::fromUtf8("Очистить выбранные категории сейчас")),
+		st::settingsButton,
+		{ .icon = &st::menuIconDelete, .type = IconType::Simple });
+	clearNowBtn->setClickedCallback([=] {
+		auto &db = ctrl->session().data().cache();
+		auto &dbBig = ctrl->session().data().cacheBigFile();
+		const auto &h = Relay::RelayHooks::Instance();
+		if (h.smartCacheCleanStickers()) {
+			db.clearByTag(uint8(Data::kStickerCacheTag));
+		}
+		if (h.smartCacheCleanVoiceRounds()) {
+			db.clearByTag(uint8(Data::kVoiceMessageCacheTag));
+			db.clearByTag(uint8(Data::kVideoMessageCacheTag));
+		}
+		if (h.smartCacheCleanVideo()) {
+			db.clearByTag(uint8(Data::kAnimationCacheTag));
+			dbBig.clear();
+		}
+		if (h.smartCacheCleanMedia()) {
+			db.clearByTag(uint8(Data::kImageCacheTag));
+		}
+		ctrl->showToast(QString::fromUtf8("Выбранный кэш очищен."));
+	});
 
 	Ui::ResizeFitChild(this, content);
 	AttachZenSectionTransition(this, content);

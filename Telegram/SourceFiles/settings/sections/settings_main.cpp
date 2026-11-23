@@ -107,7 +107,7 @@ constexpr auto kSugValidatePhone = "VALIDATE_PHONE_NUMBER"_cs;
 
 void AddInsetDivider(
 		SectionBuilder &builder,
-		int leftMargin = 60,
+		int leftMargin = st::settingsButton.padding.left(),
 		rpl::producer<bool> shown = nullptr) {
 	auto makeLine = [=](not_null<Ui::RpWidget*> parent) {
 		auto line = object_ptr<Ui::FixedHeightWidget>(parent, 1);
@@ -415,9 +415,7 @@ void BuildSectionButtons(SectionBuilder &builder) {
 		.keywords = { u"zen"_q, u"zendesktop"_q, u"relay"_q, u"hooks"_q, u"ghost"_q, u"anti-recall"_q },
 	});
 
-	builder.addSkip(6);
 	AddInsetDivider(builder);
-	builder.addSkip(6);
 
 	if (!session->supportMode()) {
 		builder.addButton({
@@ -480,7 +478,7 @@ void BuildSectionButtons(SectionBuilder &builder) {
 			preload();
 		}
 
-		AddInsetDivider(builder, 60, rpl::duplicate(shownProducer));
+		AddInsetDivider(builder, st::settingsButton.padding.left(), rpl::duplicate(shownProducer));
 		builder.addButton({
 			.title = tr::lng_settings_section_filters(),
 			.icon = { &st::menuIconShowInFolder },

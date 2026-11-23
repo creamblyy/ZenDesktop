@@ -28,14 +28,14 @@ const char kOptionUseSmallMsgBubbleRadius[] = "use-small-msg-bubble-radius";
 
 int BubbleRadiusSmall() {
 	if (Relay::RelayHooks::Instance().isMaterial3BubblesEnabled()) {
-		return 8;
+		return Relay::RelayHooks::Instance().bubbleRadiusSmall();
 	}
 	return st::bubbleRadiusSmall;
 }
 
 int BubbleRadiusLarge() {
 	if (Relay::RelayHooks::Instance().isMaterial3BubblesEnabled()) {
-		return 15;
+		return Relay::RelayHooks::Instance().bubbleRadiusLarge();
 	}
 	static const auto result = [] {
 		if (UseSmallMsgBubbleRadius.value()) {

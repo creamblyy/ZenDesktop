@@ -6,6 +6,9 @@ For license and copyright information please follow this link:
 https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "api/api_transcribes.h"
+#include "base/weak_ptr.h"
+#include "relay_hooks/relay_hooks.h"
+#include "relay_hooks/zen_transcriber.h"
 
 #include "apiwrap.h"
 #include "api/api_text_entities.h"
@@ -185,6 +188,51 @@ void Transcribes::load(not_null<HistoryItem*> item) {
 		}
 	};
 	const auto id = item->fullId();
+	if (Relay::RelayHooks::Instance().isLocalTranscribeEnabled()
+		&& !_session->premium()
+		&& !freeFor(item)) {
+		const auto media = item->media();
+		const auto doc = media ? media->document() : nullptr;
+		const auto path = doc ? doc->filepath(true) : QString();
+		if (doc && path.isEmpty()) {
+			doc->save(item->fullId(), QString());
+			auto &entry = _map[id];
+			entry.requestId = 0;
+			entry.shown = true;
+			entry.pending = false;
+			entry.failed = false;
+			entry.result = QString::fromUtf8("Загрузка файла... Нажмите ещё раз через пару секунд.");
+			toggleRound(item, entry);
+			_session->data().requestItemResize(item);
+			return;
+		}
+		auto &entry = _map[id];
+		entry.requestId = 0;
+		entry.shown = true;
+		entry.failed = false;
+		entry.pending = true;
+		entry.result = QString::fromUtf8("Распознавание...");
+		toggleRound(item, entry);
+		_session->data().requestItemResize(item);
+
+		const auto weak = base::make_weak(_session);
+		Relay::ZenTranscriber::TranscribeFile(path, [this, weak, id, toggleRound](bool ok, const QString &textOrError) {
+			const auto session = weak.get();
+			if (!session) {
+				return;
+			}
+			auto &e = _map[id];
+			e.requestId = 0;
+			e.pending = false;
+			e.failed = !ok;
+			e.result = textOrError;
+			if (const auto item = session->data().message(id)) {
+				toggleRound(item, e);
+				session->data().requestItemResize(item);
+			}
+		});
+		return;
+	}
 	const auto requestId = _api.request(MTPmessages_TranscribeAudio(
 		item->history()->peer->input(),
 		MTP_int(item->id)
