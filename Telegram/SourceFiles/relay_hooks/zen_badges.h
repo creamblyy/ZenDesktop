@@ -50,6 +50,10 @@ public:
 
 	// Drawing helper in chat lists and headers
 	int drawBadge(QPainter &p, const QRect &rectForName, int nameWidth, int outerWidth, uint64_t peerId);
+	void showBadgeInfoBox(
+		Window::SessionController *controller,
+		uint64_t peerId,
+		const QString &peerName);
 
 	[[nodiscard]] const QImage &getBadgeImage(ZenBadgeType type) const;
 

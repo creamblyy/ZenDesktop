@@ -22,6 +22,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "ui/text/text_custom_emoji.h"
 #include "main/main_session.h"
 #include "relay_hooks/zen_badges.h"
+#include "window/window_session_controller.h"
 #include "styles/style_info.h"
 
 namespace Info::Profile {
@@ -229,7 +230,18 @@ void Badge::setContent(Content content) {
 	} break;
 	}
 
-	if (!HasPremiumClick(_content) || !_premiumClickCallback) {
+	if (_content.badge == BadgeType::Zen) {
+		const auto peerId = _content.zenPeerId;
+		_view->setCursor(style::cur_pointer);
+		_view->setClickedCallback([=, session = _session] {
+			const auto peer = session->data().peerLoaded(PeerId(peerId));
+			const auto window = peer
+				? session->tryResolveWindow(peer)
+				: session->tryResolveWindow();
+			const auto name = peer ? peer->name() : QString();
+			Relay::ZenBadges::Instance().showBadgeInfoBox(window, peerId, name);
+		});
+	} else if (!HasPremiumClick(_content) || !_premiumClickCallback) {
 		_view->setAttribute(Qt::WA_TransparentForMouseEvents);
 	} else {
 		_view->setClickedCallback(_premiumClickCallback);

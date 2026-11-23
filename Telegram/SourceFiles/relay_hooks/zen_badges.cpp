@@ -6,6 +6,13 @@ This file is part of Telegram Desktop fork - ZenDesktop with RelayHooks.
 #include "logs.h"
 #include "window/window_session_controller.h"
 #include "ui/boxes/confirm_box.h"
+#include "ui/layers/generic_box.h"
+#include "ui/widgets/labels.h"
+#include "ui/wrap/vertical_layout.h"
+#include "ui/rp_widget.h"
+#include "lang/lang_keys.h"
+#include "styles/style_layers.h"
+#include "styles/style_boxes.h"
 
 #include <QtCore/QCoreApplication>
 #include <QtCore/QFile>
@@ -294,6 +301,111 @@ int ZenBadges::drawBadge(
 	}
 
 	return kBadgeWidth + kBadgeSpacing;
+}
+
+void ZenBadges::showBadgeInfoBox(
+		Window::SessionController *controller,
+		uint64_t peerId,
+		const QString &peerName) {
+	const auto info = getBadge(peerId);
+	if (!controller || !info) {
+		return;
+	}
+
+	const auto displayName = peerName.isEmpty()
+		? QString::number(NormalizePeerId(peerId))
+		: peerName;
+
+	QString title;
+	QString desc;
+	QString typeLabel;
+	switch (info->type) {
+	case ZenBadgeType::Developer:
+		title = QString::fromUtf8("Команда разработчиков ZenDesktop");
+		desc = QString::fromUtf8("%1 находится в команде разработчиков ZenDesktop.").arg(displayName);
+		typeLabel = QString::fromUtf8("Разработчик ZenDesktop");
+		break;
+	case ZenBadgeType::Staff:
+		title = QString::fromUtf8("Команда ZenDesktop");
+		desc = QString::fromUtf8("%1 является участником команды ZenDesktop.").arg(displayName);
+		typeLabel = QString::fromUtf8("Команда ZenDesktop");
+		break;
+	case ZenBadgeType::Supporter:
+		title = QString::fromUtf8("Поддержка ZenDesktop");
+		desc = QString::fromUtf8("%1 поддерживает развитие ZenDesktop.").arg(displayName);
+		typeLabel = QString::fromUtf8("Поддержка ZenDesktop");
+		break;
+	case ZenBadgeType::Desktop:
+	default:
+		title = QString::fromUtf8("Официальный ресурс ZenDesktop");
+		desc = QString::fromUtf8("%1 — официальный ресурс ZenDesktop.").arg(displayName);
+		typeLabel = QString::fromUtf8("Официальный ресурс ZenDesktop");
+		break;
+	}
+
+	const auto badgeImg = getBadgeImage(info->type);
+
+	controller->show(Box([=](not_null<Ui::GenericBox*> box) {
+		box->setWidth(st::boxWidth);
+		const auto layout = box->verticalLayout();
+
+		auto icon = object_ptr<Ui::RpWidget>(layout);
+		const auto rawIcon = icon.data();
+		rawIcon->resize(88, 88);
+		rawIcon->setNaturalWidth(88);
+		rawIcon->paintRequest() | rpl::on_next([=] {
+			auto p = QPainter(rawIcon);
+			p.setRenderHint(QPainter::Antialiasing);
+			p.setRenderHint(QPainter::SmoothPixmapTransform);
+			if (!badgeImg.isNull()) {
+				p.drawImage(rawIcon->rect(), badgeImg);
+			}
+		}, rawIcon->lifetime());
+		layout->add(std::move(icon), QMargins(0, 16, 0, 12), style::al_top);
+
+		const auto titleLabel = layout->add(
+			object_ptr<Ui::FlatLabel>(
+				layout,
+				rpl::single(title),
+				st::boxTitle),
+			QMargins(24, 0, 24, 6),
+			style::al_top);
+		titleLabel->setSelectable(false);
+
+		const auto descLabel = layout->add(
+			object_ptr<Ui::FlatLabel>(
+				layout,
+				rpl::single(desc),
+				st::boxLabel),
+			QMargins(24, 0, 24, 16),
+			style::al_top);
+		descLabel->resizeToWidth(st::boxWidth - 48);
+
+		const auto addField = [&](const QString &value, const QString &caption) {
+			const auto valLabel = layout->add(
+				object_ptr<Ui::FlatLabel>(
+					layout,
+					rpl::single(value),
+					st::boxLabel),
+				QMargins(24, 6, 24, 0),
+				style::al_left);
+			valLabel->resizeToWidth(st::boxWidth - 48);
+
+			const auto capLabel = layout->add(
+				object_ptr<Ui::FlatLabel>(
+					layout,
+					rpl::single(caption),
+					st::defaultFlatLabel),
+				QMargins(24, 2, 24, 6),
+				style::al_left);
+			capLabel->setTextColorOverride(st::windowSubTextFg->c);
+		};
+
+		addField(displayName, QString::fromUtf8("Владелец"));
+		addField(typeLabel, QString::fromUtf8("Тип бейджа"));
+
+		box->addButton(tr::lng_close(), [=] { box->closeBox(); });
+	}));
 }
 
 } // namespace Relay
