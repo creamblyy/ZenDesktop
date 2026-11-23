@@ -2047,11 +2047,12 @@ BlockPart DetailsFiller::makeInfo() {
 		auto p = QPainter(result);
 		auto c = st::windowFg->c;
 		c.setAlphaF(0.08);
-		const auto lineWidth = std::max(0, result->width() - 40);
+		const auto left = st::infoProfileLabeledPadding.left();
+		const auto lineWidth = std::max(0, result->width() - left * 2);
 		if (lineWidth > 0) {
 			for (size_t i = 0; i + 1 < rows.size(); ++i) {
 				const auto *w = rows[i];
-				p.fillRect(20, w->y() + w->height() - 1, lineWidth, 1, c);
+				p.fillRect(left, w->y() + w->height() + 1, lineWidth, 1, c);
 			}
 		}
 	}, result->lifetime());

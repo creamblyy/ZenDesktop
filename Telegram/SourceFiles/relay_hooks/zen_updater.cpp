@@ -91,9 +91,13 @@ void ZenUpdater::checkForUpdates(bool manual) {
 	}
 
 	_isChecking = true;
-	LOG(("ZenUpdater: Checking for updates from %1 (manual: %2)").arg(kUpdateManifestUrl).arg(manual));
+	const auto envUrl = qEnvironmentVariable("ZEN_UPDATE_URL");
+	const auto manifestUrl = envUrl.isEmpty()
+		? QString::fromLatin1(kUpdateManifestUrl)
+		: envUrl;
+	LOG(("ZenUpdater: Checking for updates from %1 (manual: %2)").arg(manifestUrl).arg(manual));
 
-	auto req = QNetworkRequest(QUrl(QString(kUpdateManifestUrl)));
+	auto req = QNetworkRequest(QUrl(manifestUrl));
 	req.setAttribute(QNetworkRequest::Http2AllowedAttribute, false);
 	req.setHeader(QNetworkRequest::UserAgentHeader, QString("ZenDesktop/%1").arg(kZenVersion));
 
