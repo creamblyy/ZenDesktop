@@ -21,5 +21,6 @@ namespace Settings {
 [[nodiscard]] Type ZenUpdatesId();
 [[nodiscard]] Type ZenSupportId();
 [[nodiscard]] Type ZenOtherId();
+[[nodiscard]] Type ZenFunId();
 
 } // namespace Settings

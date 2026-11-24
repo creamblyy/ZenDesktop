@@ -147,6 +147,8 @@ PRIVATE
     relay_hooks/zen_m3_palette.h
     relay_hooks/zen_m3_widgets.cpp
     relay_hooks/zen_m3_widgets.h
+    relay_hooks/zen_arrest_sound.cpp
+    relay_hooks/zen_arrest_sound.h
     relay_hooks/zen_quick_proxy.cpp
     relay_hooks/zen_quick_proxy.h
     relay_hooks/zen_transcriber.cpp

@@ -11,6 +11,8 @@ This file is part of Telegram Desktop fork - ZenDesktop with RelayHooks.
 #include "relay_hooks/zen_ws_proxy.h"
 #include "relay_hooks/zen_transcriber.h"
 #include "relay_hooks/zen_m3_widgets.h"
+#include "relay_hooks/zen_arrest_sound.h"
+#include "lottie/lottie_icon.h"
 #include "base/call_delayed.h"
 #include "base/weak_ptr.h"
 #include "core/application.h"
@@ -1508,6 +1510,133 @@ void ZenOther::setupContent() {
 		}));
 	});
 
+	Ui::AddSkip(content);
+	Ui::AddDivider(content);
+	Ui::AddSkip(content);
+
+	Ui::AddSubsectionTitle(content, rpl::single(QString::fromUtf8("Развлечения")));
+
+	const auto funBtn = AddButtonWithIcon(
+		content,
+		rpl::single(QString::fromUtf8("Приколы")),
+		st::settingsButton,
+		{ .icon = &st::menuIconManage, .type = IconType::Simple });
+
+	funBtn->setClickedCallback([=] {
+		NavigateZenSectionWithExit(content, ctrl, ZenFunId());
+	});
+
+	Ui::ResizeFitChild(this, content);
+	AttachZenSectionTransition(this, content);
+}
+
+// ==========================================
+// 9.5. Fun Section (Приколы)
+// ==========================================
+class ZenFun final : public Section<ZenFun> {
+public:
+	ZenFun(
+		QWidget *parent,
+		not_null<Window::SessionController*> controller);
+
+	[[nodiscard]] rpl::producer<QString> title() override;
+
+private:
+	void setupContent();
+};
+
+ZenFun::ZenFun(
+	QWidget *parent,
+	not_null<Window::SessionController*> controller)
+: Section(parent, controller) {
+	setupContent();
+}
+
+rpl::producer<QString> ZenFun::title() {
+	return rpl::single(QString::fromUtf8("Приколы"));
+}
+
+void ZenFun::setupContent() {
+	const auto content = Ui::CreateChild<Ui::VerticalLayout>(this);
+	const auto ctrl = controller();
+
+	Ui::AddSkip(content);
+	Ui::AddSubsectionTitle(content, rpl::single(QString::fromUtf8("Приколы")));
+
+	const auto arrestBtn = AddButtonWithIcon(
+		content,
+		rpl::single(QString::fromUtf8("Арест")),
+		st::settingsButton,
+		{ .icon = &st::menuIconPermissions, .type = IconType::Simple });
+
+	arrestBtn->setClickedCallback([=] {
+		Relay::PlayZenArrestSound();
+		ctrl->show(Box([=](not_null<Ui::GenericBox*> box) {
+			box->setWidth(st::boxWideWidth);
+			box->boxClosing() | rpl::on_next([] {
+				Relay::StopZenArrestSound();
+			}, box->lifetime());
+
+			const auto layout = box->verticalLayout();
+
+			auto strobe = object_ptr<Ui::RpWidget>(layout);
+			const auto rawStrobe = strobe.data();
+			rawStrobe->resize(st::boxWideWidth - 48, 6);
+			rawStrobe->setFixedHeight(6);
+			const auto strobeAnim = rawStrobe->lifetime().make_state<Ui::Animations::Basic>();
+			strobeAnim->init([=] {
+				rawStrobe->update();
+			});
+			strobeAnim->start();
+			rawStrobe->paintRequest() | rpl::on_next([=] {
+				auto p = QPainter(rawStrobe);
+				p.setRenderHint(QPainter::Antialiasing);
+				const auto elapsedMs = std::max<crl::time>(0, crl::now() - strobeAnim->started());
+				const auto redPhase = ((elapsedMs / 220) % 2) == 0;
+				const auto w = rawStrobe->width();
+				const auto half = w / 2;
+				p.setPen(Qt::NoPen);
+				p.setBrush(QColor(redPhase ? 0xFF2A3C : 0x2B6CFF));
+				p.drawRoundedRect(QRectF(0, 0, half - 4, 6), 3.0, 3.0);
+				p.setBrush(QColor(redPhase ? 0x2B6CFF : 0xFF2A3C));
+				p.drawRoundedRect(QRectF(half + 4, 0, w - (half + 4), 6), 3.0, 3.0);
+			}, rawStrobe->lifetime());
+			layout->add(std::move(strobe), QMargins(24, 12, 24, 8));
+
+			auto duck = CreateLottieIcon(
+				layout,
+				{
+					.name = u"blocked_peers_empty"_q,
+					.sizeOverride = { 180, 180 },
+				},
+				style::margins());
+			duck.animate(anim::repeat::loop);
+			layout->add(std::move(duck.widget), QMargins(0, 4, 0, 10), style::al_top);
+
+			const auto titleLabel = layout->add(
+				object_ptr<Ui::FlatLabel>(
+					layout,
+					rpl::single(QString::fromUtf8("ВЫ БЫЛИ АРЕСТОВАНЫ")),
+					st::boxTitle),
+				QMargins(24, 0, 24, 6),
+				style::al_top);
+			titleLabel->setSelectable(false);
+
+			const auto descLabel = layout->add(
+				object_ptr<Ui::FlatLabel>(
+					layout,
+					rpl::single(QString::fromUtf8("Полиция Telegram уже выехала за вами.")),
+					st::boxLabel),
+				QMargins(24, 0, 24, 18),
+				style::al_top);
+			descLabel->setSelectable(false);
+
+			box->addButton(rpl::single(QString::fromUtf8("Сдаться")), [=] {
+				box->closeBox();
+			});
+		}));
+	});
+
 	Ui::ResizeFitChild(this, content);
 	AttachZenSectionTransition(this, content);
 }
@@ -1946,6 +2075,10 @@ Type ZenSupportId() {
 
 Type ZenOtherId() {
 	return ZenOther::Id();
+}
+
+Type ZenFunId() {
+	return ZenFun::Id();
 }
 
 } // namespace Settings
