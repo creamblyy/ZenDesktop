@@ -10,6 +10,7 @@ This file is part of Telegram Desktop fork - ZenDesktop with RelayHooks.
 #include "relay_hooks/zen_badges.h"
 #include "relay_hooks/zen_ws_proxy.h"
 #include "relay_hooks/zen_transcriber.h"
+#include "relay_hooks/zen_m3_widgets.h"
 #include "base/call_delayed.h"
 #include "base/weak_ptr.h"
 #include "core/application.h"
@@ -701,55 +702,27 @@ void ZenAppearance::setupContent() {
 
 	AddInsetDivider(content);
 
-	const auto largeRadiusVar = content->lifetime().make_state<rpl::variable<int>>(
-		hooks.bubbleRadiusLarge());
-	const auto largeRadiusBtn = AddButtonWithLabel(
+	content->add(object_ptr<Relay::ZenM3Slider>(
 		content,
-		rpl::single(QString::fromUtf8("Скругление баблов сообщений")),
-		largeRadiusVar->value() | rpl::map([](int r) {
-			return QString("%1 px").arg(r);
-		}),
-		st::settingsButton,
-		{ &st::menuIconChatBubble });
-	largeRadiusBtn->setClickedCallback([=] {
-		static constexpr int kOptions[] = { 8, 12, 15, 18, 22 };
-		const auto cur = largeRadiusVar->current();
-		int next = kOptions[0];
-		for (int i = 0; i < 5; ++i) {
-			if (kOptions[i] == cur) {
-				next = kOptions[(i + 1) % 5];
-				break;
-			}
-		}
-		Relay::RelayHooks::Instance().setBubbleRadiusLarge(next);
-		*largeRadiusVar = next;
-	});
+		QString::fromUtf8("Скругление баблов сообщений"),
+		4,
+		24,
+		1,
+		hooks.bubbleRadiusLarge(),
+		[](int v) { return QString("%1 px").arg(v); },
+		[](int v) { Relay::RelayHooks::Instance().setBubbleRadiusLarge(v); }));
 
 	AddInsetDivider(content);
 
-	const auto smallRadiusVar = content->lifetime().make_state<rpl::variable<int>>(
-		hooks.bubbleRadiusSmall());
-	const auto smallRadiusBtn = AddButtonWithLabel(
+	content->add(object_ptr<Relay::ZenM3Slider>(
 		content,
-		rpl::single(QString::fromUtf8("Скругление углов группы")),
-		smallRadiusVar->value() | rpl::map([](int r) {
-			return QString("%1 px").arg(r);
-		}),
-		st::settingsButton,
-		{ &st::menuIconChatBubble });
-	smallRadiusBtn->setClickedCallback([=] {
-		static constexpr int kSmallOptions[] = { 4, 6, 8, 10 };
-		const auto cur = smallRadiusVar->current();
-		int next = kSmallOptions[0];
-		for (int i = 0; i < 4; ++i) {
-			if (kSmallOptions[i] == cur) {
-				next = kSmallOptions[(i + 1) % 4];
-				break;
-			}
-		}
-		Relay::RelayHooks::Instance().setBubbleRadiusSmall(next);
-		*smallRadiusVar = next;
-	});
+		QString::fromUtf8("Скругление углов группы"),
+		2,
+		14,
+		1,
+		hooks.bubbleRadiusSmall(),
+		[](int v) { return QString("%1 px").arg(v); },
+		[](int v) { Relay::RelayHooks::Instance().setBubbleRadiusSmall(v); }));
 
 	Ui::AddDividerText(
 		content,
@@ -1062,53 +1035,27 @@ void ZenNetwork::setupContent() {
 
 	AddInsetDivider(content);
 
-	const auto daysVar = content->lifetime().make_state<rpl::variable<int>>(hooks.smartCacheMaxDays());
-	const auto daysBtn = AddButtonWithLabel(
+	content->add(object_ptr<Relay::ZenM3Slider>(
 		content,
-		rpl::single(QString::fromUtf8("Хранить кэш не дольше")),
-		daysVar->value() | rpl::map([](int d) {
-			return QString::fromUtf8("%1 дн.").arg(d);
-		}),
-		st::settingsButton,
-		{ &st::menuIconRestore });
-	daysBtn->setClickedCallback([=] {
-		static constexpr int kDayOpts[] = { 1, 3, 7, 14, 30 };
-		const auto cur = daysVar->current();
-		int next = kDayOpts[0];
-		for (int i = 0; i < 5; ++i) {
-			if (kDayOpts[i] == cur) {
-				next = kDayOpts[(i + 1) % 5];
-				break;
-			}
-		}
-		Relay::RelayHooks::Instance().setSmartCacheMaxDays(next);
-		*daysVar = next;
-	});
+		QString::fromUtf8("Хранить кэш не дольше"),
+		1,
+		30,
+		1,
+		hooks.smartCacheMaxDays(),
+		[](int d) { return QString::fromUtf8("%1 дн.").arg(d); },
+		[](int d) { Relay::RelayHooks::Instance().setSmartCacheMaxDays(d); }));
 
 	AddInsetDivider(content);
 
-	const auto limitVar = content->lifetime().make_state<rpl::variable<int>>(hooks.smartCacheRamLimitMb());
-	const auto limitBtn = AddButtonWithLabel(
+	content->add(object_ptr<Relay::ZenM3Slider>(
 		content,
-		rpl::single(QString::fromUtf8("Мягкий лимит кэша")),
-		limitVar->value() | rpl::map([](int mb) {
-			return QString::fromUtf8("%1 МБ").arg(mb);
-		}),
-		st::settingsButton,
-		{ &st::menuIconSettings });
-	limitBtn->setClickedCallback([=] {
-		static constexpr int kLimOpts[] = { 256, 512, 1024, 2048 };
-		const auto cur = limitVar->current();
-		int next = kLimOpts[0];
-		for (int i = 0; i < 4; ++i) {
-			if (kLimOpts[i] == cur) {
-				next = kLimOpts[(i + 1) % 4];
-				break;
-			}
-		}
-		Relay::RelayHooks::Instance().setSmartCacheRamLimitMb(next);
-		*limitVar = next;
-	});
+		QString::fromUtf8("Мягкий лимит кэша"),
+		256,
+		2048,
+		128,
+		hooks.smartCacheRamLimitMb(),
+		[](int mb) { return QString::fromUtf8("%1 МБ").arg(mb); },
+		[](int mb) { Relay::RelayHooks::Instance().setSmartCacheRamLimitMb(mb); }));
 
 	AddInsetDivider(content);
 

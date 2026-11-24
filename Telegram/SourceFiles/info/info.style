@@ -607,6 +607,9 @@ infoBlockHeaderPosition: point(79px, 17px);
 
 infoProfileToggle: Toggle(defaultToggle) {
 	untoggledFg: menuIconFg;
+	vsize: 5px;
+	vshift: 1px;
+	stroke: 2px;
 }
 infoProfileToggleOver: Toggle(infoProfileToggle) {
 	untoggledFg: menuIconFgOver;
