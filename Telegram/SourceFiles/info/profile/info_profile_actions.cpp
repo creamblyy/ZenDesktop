@@ -48,6 +48,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "data/data_forum.h"
 #include "data/data_forum_topic.h"
 #include "data/data_peer_values.h"
+#include "data/data_photo.h"
 #include "data/data_saved_music.h"
 #include "data/data_saved_sublist.h"
 #include "data/data_session.h"
@@ -123,6 +124,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "styles/style_settings.h" // settingsButtonRightSkip.
 #include "styles/style_window.h" // mainMenuToggleFourStrokes.
 
+#include <QtCore/QDateTime>
 #include <QtGui/QGuiApplication>
 #include <QtGui/QClipboard>
 #include <QtGui/QLinearGradient>
@@ -138,7 +140,35 @@ namespace {
 constexpr auto kDay = Data::WorkingInterval::kDay;
 constexpr auto kPeerIdLinkIndex = uint16(1);
 
-[[nodiscard]] QString EstimateRegistrationDate(uint64 bareUserId) {
+struct RegDateInfo {
+	QString label;
+	QString value;
+};
+
+[[nodiscard]] QString MonthYearLabel(int year, int month1to12) {
+	static const char *kMonths[] = {
+		"январь", "февраль", "март", "апрель",
+		"май", "июнь", "июль", "август",
+		"сентябрь", "октябрь", "ноябрь", "декабрь",
+	};
+	return QString::fromUtf8("%1 %2")
+		.arg(QString::fromUtf8(kMonths[std::clamp(month1to12 - 1, 0, 11)]))
+		.arg(year);
+}
+
+[[nodiscard]] RegDateInfo EstimateRegistrationInfo(
+		not_null<PeerData*> peer,
+		uint64 bareUserId) {
+	if (const auto officialYear = peer->registrationYear(); officialYear > 2012) {
+		if (const auto officialMonth = peer->registrationMonth();
+			officialMonth >= 1 && officialMonth <= 12) {
+			return {
+				QString::fromUtf8("Дата регистрации"),
+				MonthYearLabel(officialYear, officialMonth),
+			};
+		}
+	}
+
 	struct IdAnchor {
 		uint64 id = 0;
 		int year = 0;
@@ -196,37 +226,58 @@ constexpr auto kPeerIdLinkIndex = uint16(1);
 		{ 9450000000ULL, 2026, 11 },
 	};
 	constexpr auto kCount = sizeof(kAnchors) / sizeof(kAnchors[0]);
+
+	int estTotal = 0;
+	QString fallbackValue;
 	if (bareUserId < kAnchors[0].id) {
-		return QString::fromUtf8("раньше августа 2013");
+		estTotal = kAnchors[0].year * 12 + (kAnchors[0].month - 1) - 1;
+		fallbackValue = QString::fromUtf8("раньше августа 2013");
+	} else if (bareUserId > kAnchors[kCount - 1].id) {
+		estTotal = kAnchors[kCount - 1].year * 12 + (kAnchors[kCount - 1].month - 1) + 1;
+		fallbackValue = QString::fromUtf8("после ноября 2026");
+	} else {
+		auto loIdx = size_t(0);
+		for (size_t i = 0; i + 1 < kCount; ++i) {
+			if (bareUserId <= kAnchors[i + 1].id) {
+				loIdx = i;
+				break;
+			}
+		}
+		const auto &a = kAnchors[loIdx];
+		const auto &b = kAnchors[loIdx + 1];
+		const auto mA = a.year * 12 + (a.month - 1);
+		const auto mB = b.year * 12 + (b.month - 1);
+		const auto ratio = (b.id > a.id)
+			? double(bareUserId - a.id) / double(b.id - a.id)
+			: 0.0;
+		estTotal = mA + int(std::round(ratio * double(mB - mA)));
 	}
-	if (bareUserId > kAnchors[kCount - 1].id) {
-		return QString::fromUtf8("после ноября 2026");
-	}
-	auto loIdx = size_t(0);
-	for (size_t i = 0; i + 1 < kCount; ++i) {
-		if (bareUserId <= kAnchors[i + 1].id) {
-			loIdx = i;
-			break;
+
+	if (!peer->userpicPhotoUnknown()) {
+		if (const auto photoId = peer->userpicPhotoId(); photoId != 0) {
+			const auto photo = peer->owner().photo(photoId);
+			if (!photo->isNull() && photo->date() > 0) {
+				const auto pd = QDateTime::fromSecsSinceEpoch(qint64(photo->date())).date();
+				if (pd.isValid() && pd.year() > 2012) {
+					const int photoTotal = pd.year() * 12 + (pd.month() - 1);
+					if (photoTotal < estTotal) {
+						return {
+							QString::fromUtf8("Примерная дата регистрации"),
+							QString::fromUtf8("ранее %1").arg(MonthYearLabel(pd.year(), pd.month())),
+						};
+					}
+				}
+			}
 		}
 	}
-	const auto &a = kAnchors[loIdx];
-	const auto &b = kAnchors[loIdx + 1];
-	const auto mA = a.year * 12 + (a.month - 1);
-	const auto mB = b.year * 12 + (b.month - 1);
-	const auto ratio = (b.id > a.id)
-		? double(bareUserId - a.id) / double(b.id - a.id)
-		: 0.0;
-	const auto estTotal = mA + int(std::round(ratio * double(mB - mA)));
-	const auto estYear = estTotal / 12;
-	const auto estMonth = estTotal % 12;
-	static const char *kMonths[] = {
-		"январь", "февраль", "март", "апрель",
-		"май", "июнь", "июль", "август",
-		"сентябрь", "октябрь", "ноябрь", "декабрь",
+
+	if (!fallbackValue.isEmpty()) {
+		return { QString::fromUtf8("Примерная дата регистрации"), fallbackValue };
+	}
+	return {
+		QString::fromUtf8("Примерная дата регистрации"),
+		QString::fromUtf8("~%1").arg(MonthYearLabel(estTotal / 12, (estTotal % 12) + 1)),
 	};
-	return QString::fromUtf8("~%1 %2")
-		.arg(QString::fromUtf8(kMonths[std::clamp(estMonth, 0, 11)]))
-		.arg(estYear);
 }
 
 [[nodiscard]] std::pair<QColor, QColor> ExtractDominantCardColors(
@@ -2131,11 +2182,21 @@ BlockPart DetailsFiller::makeInfo() {
 				}
 			}));
 		if (_peer->asUser() && bareId > 0) {
-			const auto regDate = EstimateRegistrationDate(bareId);
-			addInfoOneLine(
-				v::text::data(QString::fromUtf8("Примерная дата регистрации")),
-				rpl::single(TextWithEntities{ regDate }),
+			const auto reg = EstimateRegistrationInfo(_peer, bareId);
+			const auto regLine = addInfoOneLine(
+				v::text::data(reg.label),
+				rpl::single(Ui::Text::Link(reg.value, 1)),
 				QString::fromUtf8("Копировать дату"));
+			const auto regVal = reg.value;
+			regLine.text->setLink(
+				1,
+				std::make_shared<LambdaClickHandler>([=] {
+					TextUtilities::SetClipboardText({ regVal });
+					if (const auto strong = weak.get()) {
+						strong->showToast(
+							QString::fromUtf8("Дата скопирована: %1").arg(regVal));
+					}
+				}));
 		}
 	}
 	result->paintRequest() | rpl::on_next([=] {

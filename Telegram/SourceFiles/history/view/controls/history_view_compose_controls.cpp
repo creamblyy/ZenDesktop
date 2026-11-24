@@ -8,6 +8,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "history/view/controls/history_view_compose_controls.h"
 
 #include "history/view/controls/history_view_bot_menu_button.h"
+#include "relay_hooks/zen_power_tools.h"
 
 #include "base/call_delayed.h"
 #include "base/event_filter.h"
@@ -3321,6 +3322,8 @@ void ComposeControls::initField() {
 	) | rpl::on_next([=] {
 		saveDraftDelayed();
 	}, _field->lifetime());
+
+	Relay::AttachComposeInlineCalc(_wrap.get(), _field);
 }
 
 void ComposeControls::updateSubmitSettings() {
@@ -4208,6 +4211,9 @@ void ComposeControls::setupSendMenu(
 		sendAction,
 		&_st.tabbed.menu,
 		&_st.tabbed.icons);
+	if (button == _send.get()) {
+		Relay::AttachComposeTranslateMenu(button, _field, _show);
+	}
 }
 
 void ComposeControls::initSendAsButton(

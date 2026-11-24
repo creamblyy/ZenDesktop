@@ -9,6 +9,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 
 #include "api/api_attached_stickers.h"
 #include "relay_hooks/relay_hooks.h"
+#include "relay_hooks/zen_power_tools.h"
 #include "ui/layers/generic_box.h"
 #include "ui/widgets/labels.h"
 #include "ui/wrap/vertical_layout.h"
@@ -392,6 +393,7 @@ void AddPhotoActions(
 				CopyImage(photo);
 			}
 		}, &st::menuIconCopy);
+		Relay::AddReverseImageSearchMenu(menu, photo, list->controller());
 	}
 	if (photo->hasAttachedStickers()) {
 		const auto controller = list->controller();
@@ -1981,6 +1983,20 @@ void FillContextMenuItems(
 			}
 		}
 		Tgw::AddLogAction(result, view, list->controller()->uiShow());
+	}
+
+	if (item) {
+		const auto weakCtrl = base::make_weak(list->controller());
+		result->addAction(
+			QString::fromUtf8("Детали сообщения"),
+			[=] {
+				if (const auto strong = weakCtrl.get()) {
+					if (const auto msg = strong->session().data().message(itemId)) {
+						Relay::ShowMessageDetailsBox(strong, msg);
+					}
+				}
+			},
+			&st::menuIconInfo);
 	}
 
 	AddCopyLinkAction(result, link);

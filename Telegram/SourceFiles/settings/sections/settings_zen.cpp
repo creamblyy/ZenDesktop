@@ -11,6 +11,7 @@ This file is part of Telegram Desktop fork - ZenDesktop with RelayHooks.
 #include "relay_hooks/zen_ws_proxy.h"
 #include "relay_hooks/zen_transcriber.h"
 #include "relay_hooks/zen_m3_widgets.h"
+#include "relay_hooks/zen_power_tools.h"
 #include "relay_hooks/zen_arrest_sound.h"
 #include "lottie/lottie_icon.h"
 #include "base/call_delayed.h"
@@ -801,6 +802,48 @@ void ZenMessages::setupContent() {
 	Ui::AddDividerText(
 		content,
 		rpl::single(QString::fromUtf8("Настройки быстрого взаимодействия с входящими и исходящими сообщениями.")));
+
+	Ui::AddSkip(content);
+	Ui::AddDivider(content);
+	Ui::AddSkip(content);
+	Ui::AddSubsectionTitle(content, rpl::single(QString::fromUtf8("Инструменты сообщений")));
+
+	auto &lifetime = content->lifetime();
+
+	const auto inlineCalcToggle = AddToggle(
+		content,
+		rpl::single(QString::fromUtf8("Инлайн-калькулятор, валюты и единицы (=... + Tab)")),
+		rpl::single(Relay::IsInlineCalcEnabled()),
+		&st::menuIconEdit);
+	inlineCalcToggle->toggledChanges() | rpl::on_next([](bool checked) {
+		Relay::SetInlineCalcEnabled(checked);
+	}, lifetime);
+
+	AddInsetDivider(content);
+
+	const auto translateSendToggle = AddToggle(
+		content,
+		rpl::single(QString::fromUtf8("Перевод перед отправкой (ПКМ по кнопке отправки)")),
+		rpl::single(Relay::IsTranslateBeforeSendEnabled()),
+		&st::menuIconTranslate);
+	translateSendToggle->toggledChanges() | rpl::on_next([](bool checked) {
+		Relay::SetTranslateBeforeSendEnabled(checked);
+	}, lifetime);
+
+	AddInsetDivider(content);
+
+	const auto zalgoToggle = AddToggle(
+		content,
+		rpl::single(QString::fromUtf8("Фильтр Zalgo-текста (анти-спам диакритиками)")),
+		rpl::single(Relay::IsZalgoFilterEnabled()),
+		&st::menuIconInfo);
+	zalgoToggle->toggledChanges() | rpl::on_next([](bool checked) {
+		Relay::SetZalgoFilterEnabled(checked);
+	}, lifetime);
+
+	Ui::AddDividerText(
+		content,
+		rpl::single(QString::fromUtf8("В поле ввода: напишите формулу, валюту (100 usd в rub=) или единицу (100 км в ми=) и нажмите Tab. Также доступны «Детали сообщения» и «Найти похожее» в контекстном меню.")));
 
 	Ui::ResizeFitChild(this, content);
 	AttachZenSectionTransition(this, content);

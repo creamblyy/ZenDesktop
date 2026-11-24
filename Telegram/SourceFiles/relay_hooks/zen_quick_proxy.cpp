@@ -15,16 +15,136 @@ This file is part of Telegram Desktop fork - ZenDesktop with RelayHooks.
 #include "styles/style_layers.h"
 #include "styles/style_menu_icons.h"
 
+#include <QtCore/QDateTime>
 #include <QtCore/QHash>
+#include <QtCore/QJsonDocument>
+#include <QtCore/QJsonObject>
+#include <QtCore/QPointer>
+#include <QtCore/QSet>
+#include <QtCore/QStringList>
+#include <QtCore/QUrl>
 #include <QtGui/QMouseEvent>
 #include <QtGui/QPainter>
+#include <QtNetwork/QNetworkAccessManager>
+#include <QtNetwork/QNetworkReply>
+#include <QtNetwork/QNetworkRequest>
 #include <QtNetwork/QTcpSocket>
+#include <chrono>
 #include <memory>
 
 namespace Relay {
 namespace {
 
 QHash<const ZenQuickProxyWidget*, base::weak_ptr<Window::SessionController>> gWeakControllers;
+
+struct ProxyGeoEntry {
+	QString label;
+	qint64 fetchedMs = 0;
+	qint64 ttlMs = 0;
+};
+
+QHash<QString, ProxyGeoEntry> gGeoCache;
+QSet<QString> gGeoInFlight;
+
+QNetworkAccessManager *ProxyGeoNet() {
+	static QNetworkAccessManager manager;
+	return &manager;
+}
+
+[[nodiscard]] bool IsLocalProxyHost(const QString &host) {
+	const auto h = host.trimmed().toLower();
+	return h.isEmpty()
+		|| h == u"127.0.0.1"_q
+		|| h == u"localhost"_q
+		|| h == u"::1"_q
+		|| h == u"0.0.0.0"_q
+		|| h.startsWith(u"192.168."_q)
+		|| h.startsWith(u"10."_q);
+}
+
+[[nodiscard]] QString CachedProxyGeo(const QString &host) {
+	const auto h = host.trimmed().toLower();
+	if (IsLocalProxyHost(h)) {
+		return QString();
+	}
+	const auto it = gGeoCache.constFind(h);
+	if (it == gGeoCache.constEnd()) {
+		return QString();
+	}
+	if (QDateTime::currentMSecsSinceEpoch() - it->fetchedMs > it->ttlMs) {
+		return QString();
+	}
+	return it->label;
+}
+
+void RequestProxyGeo(const QString &host, ZenQuickProxyWidget *widget) {
+	const auto h = host.trimmed().toLower();
+	if (IsLocalProxyHost(h) || gGeoInFlight.contains(h)) {
+		return;
+	}
+	const auto it = gGeoCache.constFind(h);
+	if (it != gGeoCache.constEnd()
+		&& (QDateTime::currentMSecsSinceEpoch() - it->fetchedMs <= it->ttlMs)) {
+		return;
+	}
+	gGeoInFlight.insert(h);
+	const QUrl url(QString::fromUtf8("https://ipwho.is/%1").arg(
+		QString::fromUtf8(QUrl::toPercentEncoding(h))));
+	QNetworkRequest req(url);
+	req.setAttribute(
+		QNetworkRequest::RedirectPolicyAttribute,
+		QNetworkRequest::NoLessSafeRedirectPolicy);
+	req.setTransferTimeout(std::chrono::milliseconds(4000));
+	auto *reply = ProxyGeoNet()->get(req);
+	const auto widgetPtr = QPointer<ZenQuickProxyWidget>(widget);
+	QObject::connect(reply, &QNetworkReply::finished, reply, [reply, h, widgetPtr] {
+		reply->deleteLater();
+		gGeoInFlight.remove(h);
+		const auto now = QDateTime::currentMSecsSinceEpoch();
+		const auto status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+		if (reply->error() == QNetworkReply::NoError && status >= 200 && status < 300) {
+			QJsonParseError err;
+			const auto doc = QJsonDocument::fromJson(reply->readAll(), &err);
+			if (err.error == QJsonParseError::NoError && doc.isObject()) {
+				const auto obj = doc.object();
+				if (obj.value(u"success"_q).toBool()) {
+					const auto cc = obj.value(u"country_code"_q).toString();
+					const auto country = obj.value(u"country"_q).toString();
+					const auto city = obj.value(u"city"_q).toString();
+					const auto conn = obj.value(u"connection"_q).toObject();
+					auto isp = conn.value(u"org"_q).toString();
+					if (isp.isEmpty()) {
+						isp = conn.value(u"isp"_q).toString();
+					}
+					QStringList parts;
+					if (!cc.isEmpty()) {
+						parts.append(cc);
+					} else if (!country.isEmpty()) {
+						parts.append(country);
+					}
+					if (!city.isEmpty()) {
+						parts.append(city);
+					}
+					if (!isp.isEmpty()) {
+						parts.append(isp);
+					}
+					if (!parts.isEmpty()) {
+						gGeoCache.insert(h, {
+							parts.join(QString::fromUtf8(" · ")),
+							now,
+							30LL * 60 * 1000,
+						});
+						if (widgetPtr) {
+							widgetPtr->updateState();
+						}
+						return;
+					}
+				}
+			}
+		}
+		gGeoCache.insert(h, { QString(), now, 3LL * 60 * 1000 });
+	});
+}
 
 } // namespace
 
@@ -65,11 +185,15 @@ void ZenQuickProxyWidget::updateState() {
 			? QString::fromUtf8("WS Proxy: %1 ms").arg(_pingMs)
 			: QString::fromUtf8("WS Proxy (вкл.)"));
 	} else if (enabled) {
-		setToolTip((_pingMs > 0)
+		auto tip = (_pingMs > 0)
 			? QString::fromUtf8("Прокси: %1 ms").arg(_pingMs)
 			: (_pingMs < 0
 				? QString::fromUtf8("Прокси: нет ответа")
-				: QString::fromUtf8("Прокси (вкл.)")));
+				: QString::fromUtf8("Прокси (вкл.)"));
+		if (const auto geo = CachedProxyGeo(proxySettings.selected().host); !geo.isEmpty()) {
+			tip += u"\n"_q + geo;
+		}
+		setToolTip(tip);
 	} else {
 		setToolTip(QString::fromUtf8("Прокси отключён (ЛКМ — выбрать, ПКМ — вкл/выкл)"));
 	}
@@ -111,6 +235,9 @@ void ZenQuickProxyWidget::measurePing() {
 		const auto selected = proxySettings.selected();
 		host = selected.host;
 		port = selected.port;
+		if (!host.isEmpty()) {
+			RequestProxyGeo(host, this);
+		}
 	}
 	if (host.isEmpty() || port == 0) {
 		_pingMs = 0;
@@ -237,6 +364,13 @@ void ZenQuickProxyWidget::showMenu() {
 			: QString::fromUtf8("Прокси отключён"));
 	const auto headerAct = _menu->addAction(pingText, [] {});
 	headerAct->setEnabled(false);
+	if (enabled && !wsOn && !selected.host.isEmpty()) {
+		RequestProxyGeo(selected.host, this);
+		if (const auto geo = CachedProxyGeo(selected.host); !geo.isEmpty()) {
+			const auto geoAct = _menu->addAction(geo, [] {});
+			geoAct->setEnabled(false);
+		}
+	}
 	_menu->addSeparator();
 
 	for (const auto &item : proxySettings.list()) {

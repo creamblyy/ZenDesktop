@@ -8,6 +8,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "menu/menu_send.h"
 
 #include "menu/menu_checked_action.h"
+#include "relay_hooks/zen_power_tools.h"
 
 #include "api/api_common.h"
 #include "base/event_filter.h"
@@ -872,6 +873,8 @@ void SetupMenuAndShortcuts(
 		if (result != FillMenuResult::Prepared) {
 			return false;
 		}
+		Relay::AppendSendMenuExtra(button, *menu);
+		(*menu)->prepareGeometryFor(QCursor::pos());
 		(*menu)->popupPrepared();
 		return true;
 	};

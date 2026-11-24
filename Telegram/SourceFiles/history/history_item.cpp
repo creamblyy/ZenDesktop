@@ -9,6 +9,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 
 #include "api/api_premium.h"
 #include "relay_hooks/relay_hooks.h"
+#include "relay_hooks/zen_power_tools.h"
 #include "base/unixtime.h"
 #include "api/api_sensitive_content.h"
 #include "api/api_transcribes.h"
@@ -4783,6 +4784,9 @@ void HistoryItem::detectTextLinks(
 }
 
 void HistoryItem::setText(TextWithEntities textWithEntities) {
+	if (Relay::IsZalgoFilterEnabled()) {
+		Relay::FilterZalgoInPlace(textWithEntities.text);
+	}
 	detectTextLinks(textWithEntities);
 	setTextValue((_media && _media->consumeMessageText(textWithEntities))
 		? TextWithEntities()
