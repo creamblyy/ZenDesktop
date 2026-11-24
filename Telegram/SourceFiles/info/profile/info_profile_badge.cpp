@@ -238,7 +238,9 @@ void Badge::setContent(Content content) {
 			const auto window = peer
 				? session->tryResolveWindow(peer)
 				: session->tryResolveWindow();
-			const auto name = peer ? peer->name() : QString();
+			const auto name = (peer && !peer->username().isEmpty())
+				? ('@' + peer->username())
+				: (peer ? peer->name() : QString());
 			Relay::ZenBadges::Instance().showBadgeInfoBox(window, peerId, name);
 		});
 	} else if (!HasPremiumClick(_content) || !_premiumClickCallback) {

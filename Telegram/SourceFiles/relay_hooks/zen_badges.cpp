@@ -9,6 +9,7 @@ This file is part of Telegram Desktop fork - ZenDesktop with RelayHooks.
 #include "ui/layers/generic_box.h"
 #include "ui/widgets/labels.h"
 #include "ui/wrap/vertical_layout.h"
+#include "ui/effects/animations.h"
 #include "ui/rp_widget.h"
 #include "lang/lang_keys.h"
 #include "styles/style_layers.h"
@@ -20,9 +21,11 @@ This file is part of Telegram Desktop fork - ZenDesktop with RelayHooks.
 #include <QtCore/QJsonObject>
 #include <QtCore/QJsonValue>
 #include <QtGui/QPainterPath>
+#include <QtGui/QTransform>
 #include <QtNetwork/QNetworkAccessManager>
 #include <QtNetwork/QNetworkReply>
 #include <QtNetwork/QNetworkRequest>
+#include <cmath>
 
 namespace Relay {
 namespace {
@@ -353,7 +356,7 @@ void ZenBadges::showBadgeInfoBox(
 	switch (info->type) {
 	case ZenBadgeType::Developer:
 		title = QString::fromUtf8("Разработчик ZenDesktop");
-		desc = QString::fromUtf8("%1 находится в команде разработчиков ZenDesktop.").arg(displayName);
+		desc = QString::fromUtf8("%1 является членом команды разработчиков ZenDesktop.").arg(displayName);
 		typeLabel = QString::fromUtf8("Разработчик ZenDesktop");
 		break;
 	case ZenBadgeType::Staff:
@@ -382,17 +385,71 @@ void ZenBadges::showBadgeInfoBox(
 
 		auto icon = object_ptr<Ui::RpWidget>(layout);
 		const auto rawIcon = icon.data();
-		rawIcon->resize(88, 88);
-		rawIcon->setNaturalWidth(88);
+		rawIcon->resize(104, 104);
+		rawIcon->setNaturalWidth(104);
+		const auto spinAnim = rawIcon->lifetime().make_state<Ui::Animations::Basic>();
+		spinAnim->init([=] {
+			rawIcon->update();
+		});
+		spinAnim->start();
 		rawIcon->paintRequest() | rpl::on_next([=] {
 			auto p = QPainter(rawIcon);
 			p.setRenderHint(QPainter::Antialiasing);
 			p.setRenderHint(QPainter::SmoothPixmapTransform);
-			if (!badgeImg.isNull()) {
-				p.drawImage(rawIcon->rect(), badgeImg);
+			if (badgeImg.isNull()) {
+				return;
 			}
+			const auto elapsedMs = std::max<crl::time>(0, crl::now() - spinAnim->started());
+			constexpr auto kPeriodMs = 4200.0;
+			const auto phase = std::fmod(double(elapsedMs), kPeriodMs) / kPeriodMs;
+			const auto angleDeg = phase * 360.0;
+			const auto rad = angleDeg * 3.14159265358979323846 / 180.0;
+			const auto facing = std::cos(rad);
+			const auto sweep = 0.5 + 0.5 * std::sin(rad);
+
+			constexpr auto kDrawSize = 80;
+			QImage shaded(kDrawSize, kDrawSize, QImage::Format_ARGB32_Premultiplied);
+			shaded.fill(Qt::transparent);
+			{
+				QPainter sp(&shaded);
+				sp.setRenderHint(QPainter::Antialiasing);
+				sp.setRenderHint(QPainter::SmoothPixmapTransform);
+				sp.drawImage(shaded.rect(), badgeImg);
+				sp.setCompositionMode(QPainter::CompositionMode_SourceAtop);
+
+				const auto edgeShade = int((1.0 - std::abs(facing)) * 70.0);
+				if (edgeShade > 0) {
+					sp.fillRect(shaded.rect(), QColor(0, 0, 0, edgeShade));
+				}
+
+				const auto highlightX = (sweep - 0.5) * kDrawSize * 1.4;
+				QLinearGradient spec(
+					highlightX - 24.0,
+					0.0,
+					highlightX + 24.0,
+					kDrawSize);
+				spec.setColorAt(0.0, QColor(255, 255, 255, 0));
+				spec.setColorAt(0.5, QColor(255, 255, 255, 55));
+				spec.setColorAt(1.0, QColor(255, 255, 255, 0));
+				sp.fillRect(shaded.rect(), spec);
+			}
+
+			const auto cx = rawIcon->width() * 0.5;
+			const auto cy = rawIcon->height() * 0.5;
+			QTransform xform;
+			xform.translate(cx, cy);
+			xform.rotate(angleDeg, Qt::YAxis, 360.0);
+			xform.translate(-cx, -cy);
+			p.setTransform(xform, true);
+
+			const auto target = QRect(
+				(rawIcon->width() - kDrawSize) / 2,
+				(rawIcon->height() - kDrawSize) / 2,
+				kDrawSize,
+				kDrawSize);
+			p.drawImage(target, shaded);
 		}, rawIcon->lifetime());
-		layout->add(std::move(icon), QMargins(0, 16, 0, 12), style::al_top);
+		layout->add(std::move(icon), QMargins(0, 12, 0, 8), style::al_top);
 
 		const auto titleLabel = layout->add(
 			object_ptr<Ui::FlatLabel>(
