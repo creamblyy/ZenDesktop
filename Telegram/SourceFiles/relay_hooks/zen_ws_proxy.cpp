@@ -262,8 +262,8 @@ public:
 		QObject *parent)
 	: QObject(parent)
 	, _client(client)
-	, _secret(secret)
-	, _connectTimer(this) {
+	, _connectTimer(this)
+	, _secret(secret) {
 		_client->setParent(this);
 		_client->setSocketOption(QAbstractSocket::LowDelayOption, 1);
 

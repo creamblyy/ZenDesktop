@@ -17,6 +17,7 @@ This file is part of Telegram Desktop fork - ZenDesktop (Material 3 UI widgets).
 #include "styles/style_widgets.h"
 
 #include <QtCore/QEvent>
+#include <QtCore/QObject>
 #include <QtCore/QPointer>
 #include <QtCore/QVariant>
 #include <QtGui/QMouseEvent>
@@ -24,7 +25,6 @@ This file is part of Telegram Desktop fork - ZenDesktop (Material 3 UI widgets).
 #include <QtGui/QPainterPath>
 #include <algorithm>
 #include <cmath>
-#include <memory>
 #include <vector>
 
 namespace Relay {
@@ -37,6 +37,14 @@ constexpr auto kHandleWidthDrag = 3.0;
 constexpr auto kHandleHeight = 24.0;
 constexpr auto kHandleGap = 4.0;
 constexpr auto kStopDotSize = 4.0;
+
+struct M3ThemeState final : QObject {
+	explicit M3ThemeState(QObject *parent) : QObject(parent) {}
+	std::vector<QPointer<QWidget>> rows;
+	std::function<void()> scan;
+	bool scanScheduled = false;
+	bool refreshScheduled = false;
+};
 
 } // namespace
 
@@ -410,27 +418,23 @@ void ApplyZenM3SettingsTheme(not_null<QWidget*> root) {
 	}
 	root->setProperty("zen_m3_theme_root", true);
 
-	struct ThemeState {
-		std::vector<QPointer<QWidget>> rows;
-		bool scanScheduled = false;
-		bool refreshScheduled = false;
-	};
-
 	const auto rootPtr = QPointer<QWidget>(root.get());
-	const auto state = std::make_shared<ThemeState>();
-	root->lifetime().add([state] {});
+	const auto statePtr = QPointer<M3ThemeState>(new M3ThemeState(root.get()));
 
 	const auto scheduleRefreshRows = [=] {
-		if (!rootPtr || state->refreshScheduled) {
+		if (!rootPtr || !statePtr || statePtr->refreshScheduled) {
 			return;
 		}
-		state->refreshScheduled = true;
+		statePtr->refreshScheduled = true;
 		base::call_delayed(0, rootPtr.data(), [=] {
-			state->refreshScheduled = false;
+			if (!statePtr) {
+				return;
+			}
+			statePtr->refreshScheduled = false;
 			if (!rootPtr) {
 				return;
 			}
-			for (const auto &rowPtr : state->rows) {
+			for (const auto &rowPtr : statePtr->rows) {
 				if (rowPtr && rowPtr->isVisible()) {
 					rowPtr->update();
 				}
@@ -439,13 +443,14 @@ void ApplyZenM3SettingsTheme(not_null<QWidget*> root) {
 	};
 
 	const auto attachRowOverlay = [=](not_null<Ui::RpWidget*> row, int insetLeft) {
-		if (row->property("zen_m3_skip_row").toBool()
+		if (!statePtr
+			|| row->property("zen_m3_skip_row").toBool()
 			|| row->property("zen_m3_row_applied").toBool()) {
 			return;
 		}
 		row->setProperty("zen_m3_row_applied", true);
 		const auto rowRaw = row.get();
-		state->rows.push_back(rowRaw);
+		statePtr->rows.push_back(rowRaw);
 
 		const auto overlay = Ui::CreateChild<Ui::RpWidget>(rowRaw);
 		overlay->setObjectName(u"zen_m3_row_overlay"_q);
@@ -465,7 +470,7 @@ void ApplyZenM3SettingsTheme(not_null<QWidget*> root) {
 
 		overlay->paintRequest(
 		) | rpl::on_next([=] {
-			if (!rootPtr) {
+			if (!rootPtr || !statePtr) {
 				return;
 			}
 			const auto rootW = rootPtr->width();
@@ -478,7 +483,7 @@ void ApplyZenM3SettingsTheme(not_null<QWidget*> root) {
 			auto hasPrev = false;
 			auto hasNext = false;
 			auto nextGapIsZero = false;
-			for (const auto &other : state->rows) {
+			for (const auto &other : statePtr->rows) {
 				if (!other || other == rowRaw || !other->isVisible() || other->height() <= 0) {
 					continue;
 				}
@@ -570,18 +575,18 @@ void ApplyZenM3SettingsTheme(not_null<QWidget*> root) {
 		overlay->raise();
 	};
 
-	const auto scanSelf = std::make_shared<std::function<void()>>();
-	root->lifetime().add([scanSelf] {});
-	const auto weakScan = std::weak_ptr<std::function<void()>>(scanSelf);
 	const auto scheduleScan = [=] {
-		if (!rootPtr || state->scanScheduled) {
+		if (!rootPtr || !statePtr || statePtr->scanScheduled) {
 			return;
 		}
-		state->scanScheduled = true;
+		statePtr->scanScheduled = true;
 		base::call_delayed(0, rootPtr.data(), [=] {
-			state->scanScheduled = false;
-			if (const auto fn = weakScan.lock(); rootPtr && fn && *fn) {
-				(*fn)();
+			if (!statePtr) {
+				return;
+			}
+			statePtr->scanScheduled = false;
+			if (rootPtr && statePtr->scan) {
+				statePtr->scan();
 			}
 		});
 	};
@@ -599,10 +604,16 @@ void ApplyZenM3SettingsTheme(not_null<QWidget*> root) {
 		});
 	};
 
-	*scanSelf = [=] {
-		if (!rootPtr) {
+	statePtr->scan = [=] {
+		if (!rootPtr || !statePtr) {
 			return;
 		}
+		auto &rows = statePtr->rows;
+		rows.erase(
+			std::remove_if(rows.begin(), rows.end(), [](const QPointer<QWidget> &p) {
+				return p.isNull();
+			}),
+			rows.end());
 		watchContainer(rootPtr.data());
 		for (auto *child : rootPtr->findChildren<QWidget*>()) {
 			if (auto *layout = dynamic_cast<Ui::VerticalLayout*>(child)) {
@@ -644,7 +655,7 @@ void ApplyZenM3SettingsTheme(not_null<QWidget*> root) {
 		scheduleRefreshRows();
 	};
 
-	(*scanSelf)();
+	statePtr->scan();
 	scheduleScan();
 }
 
