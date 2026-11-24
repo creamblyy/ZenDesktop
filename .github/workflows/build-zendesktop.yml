@@ -300,6 +300,7 @@ jobs:
       - name: Build ZenDesktop
         run: |
           cd %GITHUB_WORKSPACE%\tdesktop
+          cmake --build out --config Release --target ZERO_CHECK
           cmake --build out --config Release --parallel -- /p:PreferredToolArchitecture=x64
 
       - name: Prepare Artifact
