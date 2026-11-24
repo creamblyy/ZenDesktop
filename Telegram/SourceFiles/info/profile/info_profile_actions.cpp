@@ -3683,8 +3683,10 @@ void ApplyM3ProfileButtons(not_null<QWidget*> container) {
 		return;
 	}
 	const auto buttons = std::make_shared<std::vector<QPointer<Ui::SettingsButton>>>();
-	for (auto *btn : container->findChildren<Ui::SettingsButton*>()) {
-		buttons->push_back(btn);
+	for (auto *child : container->findChildren<QWidget*>()) {
+		if (auto *btn = dynamic_cast<Ui::SettingsButton*>(child)) {
+			buttons->push_back(btn);
+		}
 	}
 	if (buttons->empty()) {
 		return;
@@ -3766,7 +3768,7 @@ void ActionsFiller::fill() {
 		}
 	}
 	for (auto *child : _blocks.layout()->children()) {
-		if (auto *v = qobject_cast<Ui::VerticalLayout*>(child)) {
+		if (auto *v = dynamic_cast<Ui::VerticalLayout*>(child)) {
 			ApplyM3ProfileButtons(v);
 		}
 	}

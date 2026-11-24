@@ -357,7 +357,11 @@ object_ptr<Ui::RpWidget> InnerWidget::setupContent(
 		addTabsHost();
 	}
 	if (Relay::RelayHooks::Instance().isMaterial3BubblesEnabled()) {
-		for (auto *div : result->findChildren<Ui::BoxContentDivider*>()) {
+		for (auto *child : result->findChildren<QWidget*>()) {
+			auto *div = dynamic_cast<Ui::BoxContentDivider*>(child);
+			if (!div) {
+				continue;
+			}
 			base::install_event_filter(div, [=](not_null<QEvent*> e) {
 				if (e->type() == QEvent::Paint) {
 					QPainter(div).fillRect(div->rect(), st::windowBg->c);

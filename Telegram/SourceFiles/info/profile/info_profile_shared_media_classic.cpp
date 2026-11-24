@@ -375,8 +375,10 @@ object_ptr<Ui::SlideWrap<Ui::RpWidget>> SetupSharedMediaClassic(
 	if (Relay::RelayHooks::Instance().isMaterial3BubblesEnabled()) {
 		const auto scope = content.data();
 		const auto buttons = std::make_shared<std::vector<QPointer<Ui::SettingsButton>>>();
-		for (auto *btn : scope->findChildren<Ui::SettingsButton*>()) {
-			buttons->push_back(btn);
+		for (auto *child : scope->findChildren<QWidget*>()) {
+			if (auto *btn = dynamic_cast<Ui::SettingsButton*>(child)) {
+				buttons->push_back(btn);
+			}
 		}
 		for (const auto &btnPtr : *buttons) {
 			auto *btn = btnPtr.data();
