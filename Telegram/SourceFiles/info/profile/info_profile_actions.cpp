@@ -2030,19 +2030,6 @@ BlockPart DetailsFiller::makeInfo() {
 			idStr);
 	}
 	result->paintRequest() | rpl::on_next([=] {
-		auto p = QPainter(result);
-		p.setRenderHint(QPainter::Antialiasing);
-		const auto m3 = Relay::RelayHooks::Instance().isMaterial3BubblesEnabled();
-		if (m3 && result->width() > 32 && result->height() > 16) {
-			const auto cardRect = QRectF(result->rect()).adjusted(12.0, 2.0, -12.0, -2.0);
-			auto bg = st::windowFg->c;
-			bg.setAlphaF(0.055);
-			auto border = st::windowFg->c;
-			border.setAlphaF(0.09);
-			p.setBrush(bg);
-			p.setPen(QPen(border, 1.0));
-			p.drawRoundedRect(cardRect, 16.0, 16.0);
-		}
 		std::vector<QWidget*> rows;
 		const auto minRowWidth = result->width() / 2;
 		for (auto *child : result->children()) {
@@ -2052,16 +2039,59 @@ BlockPart DetailsFiller::makeInfo() {
 				}
 			}
 		}
-		if (rows.size() < 2) {
+		if (rows.empty()) {
 			return;
 		}
 		std::sort(rows.begin(), rows.end(), [](const QWidget *a, const QWidget *b) {
 			return a->y() < b->y();
 		});
+		auto p = QPainter(result);
+		p.setRenderHint(QPainter::Antialiasing);
+		if (Relay::RelayHooks::Instance().isMaterial3BubblesEnabled()) {
+			auto fill = st::windowFg->c;
+			fill.setAlphaF(0.06);
+			p.setPen(Qt::NoPen);
+			constexpr auto kMarginX = 12.0;
+			constexpr auto kOuterR = 16.0;
+			constexpr auto kInnerR = 4.0;
+			const auto wTotal = double(result->width());
+			if (wTotal > 2.0 * kMarginX) {
+				for (size_t i = 0; i < rows.size(); ++i) {
+					const auto *w = rows[i];
+					const auto isFirst = (i == 0);
+					const auto isLast = (i + 1 == rows.size());
+					const auto x1 = kMarginX;
+					const auto x2 = wTotal - kMarginX;
+					const auto y1 = double(w->y()) + (isFirst ? 1.0 : 1.5);
+					const auto y2 = double(w->y() + w->height()) - (isLast ? 1.0 : 1.5);
+					if (y2 <= y1 + 4.0) {
+						continue;
+					}
+					const auto rt = isFirst ? kOuterR : kInnerR;
+					const auto rb = isLast ? kOuterR : kInnerR;
+					QPainterPath path;
+					path.moveTo(x1 + rt, y1);
+					path.lineTo(x2 - rt, y1);
+					path.arcTo(QRectF(x2 - 2.0 * rt, y1, 2.0 * rt, 2.0 * rt), 90.0, -90.0);
+					path.lineTo(x2, y2 - rb);
+					path.arcTo(QRectF(x2 - 2.0 * rb, y2 - 2.0 * rb, 2.0 * rb, 2.0 * rb), 0.0, -90.0);
+					path.lineTo(x1 + rb, y2);
+					path.arcTo(QRectF(x1, y2 - 2.0 * rb, 2.0 * rb, 2.0 * rb), 270.0, -90.0);
+					path.lineTo(x1, y1 + rt);
+					path.arcTo(QRectF(x1, y1, 2.0 * rt, 2.0 * rt), 180.0, -90.0);
+					path.closeSubpath();
+					p.fillPath(path, fill);
+				}
+			}
+			return;
+		}
+		if (rows.size() < 2) {
+			return;
+		}
 		auto c = st::windowFg->c;
 		c.setAlphaF(0.08);
-		const auto left = m3 ? 24 : st::infoProfileLabeledPadding.left();
-		const auto right = m3 ? 24 : st::infoProfileLabeledPadding.right();
+		const auto left = st::infoProfileLabeledPadding.left();
+		const auto right = st::infoProfileLabeledPadding.right();
 		const auto lineWidth = std::max(0, result->width() - left - right);
 		if (lineWidth > 0) {
 			p.setPen(Qt::NoPen);
@@ -3720,13 +3750,9 @@ void ApplyM3ProfileButtons(not_null<QWidget*> container) {
 			const auto maskPath = full.subtracted(cardPath);
 
 			auto tint = st::windowFg->c;
-			tint.setAlphaF(0.055);
-			auto border = st::windowFg->c;
-			border.setAlphaF(0.09);
+			tint.setAlphaF(0.06);
 			p.fillPath(maskPath, st::windowBg->c);
 			p.fillPath(cardPath, tint);
-			p.setPen(QPen(border, 1.0));
-			p.drawPath(cardPath);
 		}, btn->lifetime());
 	}
 }

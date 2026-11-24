@@ -439,13 +439,9 @@ object_ptr<Ui::SlideWrap<Ui::RpWidget>> SetupSharedMediaClassic(
 				const auto maskPath = full.subtracted(cardPath);
 
 				auto tint = st::windowFg->c;
-				tint.setAlphaF(0.055);
-				auto border = st::windowFg->c;
-				border.setAlphaF(0.09);
+				tint.setAlphaF(0.06);
 				p.fillPath(maskPath, st::windowBg->c);
 				p.fillPath(cardPath, tint);
-				p.setPen(QPen(border, 1.0));
-				p.drawPath(cardPath);
 			}, btn->lifetime());
 		}
 	}

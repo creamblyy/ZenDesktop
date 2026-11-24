@@ -117,6 +117,13 @@ void ZenM3Slider::paintEvent(QPaintEvent *e) {
 	const auto bgColor = st::windowBg->c;
 	const auto fgColor = st::windowFg->c;
 
+	// M3 Island surface behind slider
+	auto islandBg = fgColor;
+	islandBg.setAlphaF(0.06);
+	p.setPen(Qt::NoPen);
+	p.setBrush(islandBg);
+	p.drawRoundedRect(QRectF(12.0, 2.0, double(width()) - 24.0, double(height()) - 4.0), 16.0, 16.0);
+
 	// Value pill string
 	const auto valText = _formatter ? _formatter(_value) : QString::number(_value);
 	const auto pillFont = st::semiboldFont;

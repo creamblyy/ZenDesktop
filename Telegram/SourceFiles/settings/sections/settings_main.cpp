@@ -114,6 +114,9 @@ void AddInsetDivider(
 		int leftMargin = st::settingsButton.padding.left(),
 		rpl::producer<bool> shown = nullptr) {
 	auto makeLine = [=](not_null<Ui::RpWidget*> parent) {
+		if (Relay::RelayHooks::Instance().isMaterial3BubblesEnabled()) {
+			return object_ptr<Ui::FixedHeightWidget>(parent, 0);
+		}
 		auto line = object_ptr<Ui::FixedHeightWidget>(parent, 1);
 		const auto raw = line.data();
 		raw->paintRequest() | rpl::on_next([=] {
@@ -896,8 +899,8 @@ void Main::setupContent() {
 				}
 				const auto x1 = kMarginX;
 				const auto x2 = w - kMarginX;
-				const auto y1 = isFirst ? 0.0 : 1.0;
-				const auto y2 = isLast ? h : (h - 1.0);
+				const auto y1 = isFirst ? 0.0 : 1.5;
+				const auto y2 = isLast ? h : (h - 1.5);
 				const auto rt = isFirst ? kOuterR : kInnerR;
 				const auto rb = isLast ? kOuterR : kInnerR;
 
@@ -918,7 +921,7 @@ void Main::setupContent() {
 				const auto maskPath = full.subtracted(cardPath);
 
 				auto tint = st::windowFg->c;
-				tint.setAlphaF(0.05);
+				tint.setAlphaF(0.06);
 				p.fillPath(cardPath, tint);
 				p.fillPath(maskPath, st::windowBg->c);
 			}, btn->lifetime());

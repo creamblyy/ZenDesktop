@@ -77,8 +77,12 @@ not_null<Ui::SettingsButton*> AddToggle(
 	return btn;
 }
 
-// Inset divider (M3 style: 1px line inset aligned with text)
+// Inset divider (M3 style: clean 3px gap between islands, or 1px line when M3 off)
 void AddInsetDivider(not_null<Ui::VerticalLayout*> content, int leftMargin = st::settingsButton.padding.left()) {
+	if (Relay::RelayHooks::Instance().isMaterial3BubblesEnabled()) {
+		content->add(object_ptr<Ui::FixedHeightWidget>(content, 3));
+		return;
+	}
 	const auto divider = content->add(
 		object_ptr<Ui::FixedHeightWidget>(content, 1),
 		QMargins(leftMargin, 0, 20, 0));
@@ -156,9 +160,85 @@ void FinishZenReveal(ZenTransitionState *state) {
 	}
 }
 
+void ApplyM3ZenSectionIslands(not_null<Ui::VerticalLayout*> content) {
+	if (!Relay::RelayHooks::Instance().isMaterial3BubblesEnabled()) {
+		return;
+	}
+	std::vector<std::vector<Ui::SettingsButton*>> groups;
+	std::vector<Ui::SettingsButton*> current;
+	const auto flush = [&] {
+		if (!current.empty()) {
+			groups.push_back(std::move(current));
+			current.clear();
+		}
+	};
+	for (auto *child : content->children()) {
+		if (auto *btn = dynamic_cast<Ui::SettingsButton*>(child)) {
+			current.push_back(btn);
+		} else if (auto *fix = dynamic_cast<Ui::FixedHeightWidget*>(child)) {
+			if (fix->height() <= 4) {
+				continue;
+			}
+			flush();
+		} else if (child->isWidgetType()) {
+			flush();
+		}
+	}
+	flush();
+
+	for (const auto &group : groups) {
+		const auto count = int(group.size());
+		for (int i = 0; i < count; ++i) {
+			auto *btn = group[i];
+			const auto isFirst = (i == 0);
+			const auto isLast = (i + 1 == count);
+			btn->paintRequest() | rpl::on_next([=] {
+				auto p = QPainter(btn);
+				p.setRenderHint(QPainter::Antialiasing);
+				constexpr auto kMarginX = 12.0;
+				constexpr auto kOuterR = 16.0;
+				constexpr auto kInnerR = 4.0;
+				const auto w = double(btn->width());
+				const auto h = double(btn->height());
+				if (w <= 2.0 * kMarginX || h <= 4.0) {
+					return;
+				}
+				const auto x1 = kMarginX;
+				const auto x2 = w - kMarginX;
+				const auto y1 = isFirst ? 0.5 : 0.5;
+				const auto y2 = isLast ? (h - 0.5) : (h - 0.5);
+				const auto rt = isFirst ? kOuterR : kInnerR;
+				const auto rb = isLast ? kOuterR : kInnerR;
+
+				QPainterPath cardPath;
+				cardPath.moveTo(x1 + rt, y1);
+				cardPath.lineTo(x2 - rt, y1);
+				cardPath.arcTo(QRectF(x2 - 2.0 * rt, y1, 2.0 * rt, 2.0 * rt), 90.0, -90.0);
+				cardPath.lineTo(x2, y2 - rb);
+				cardPath.arcTo(QRectF(x2 - 2.0 * rb, y2 - 2.0 * rb, 2.0 * rb, 2.0 * rb), 0.0, -90.0);
+				cardPath.lineTo(x1 + rb, y2);
+				cardPath.arcTo(QRectF(x1, y2 - 2.0 * rb, 2.0 * rb, 2.0 * rb), 270.0, -90.0);
+				cardPath.lineTo(x1, y1 + rt);
+				cardPath.arcTo(QRectF(x1, y1, 2.0 * rt, 2.0 * rt), 180.0, -90.0);
+				cardPath.closeSubpath();
+
+				QPainterPath full;
+				full.addRect(QRectF(0.0, 0.0, w, h));
+				const auto maskPath = full.subtracted(cardPath);
+
+				auto tint = st::windowFg->c;
+				tint.setAlphaF(0.06);
+				p.fillPath(cardPath, tint);
+				p.fillPath(maskPath, st::windowBg->c);
+			}, btn->lifetime());
+		}
+	}
+}
+
 void AttachZenSectionTransition(
 		not_null<AbstractSection*> section,
 		not_null<Ui::VerticalLayout*> content) {
+	ApplyM3ZenSectionIslands(content);
 	const auto state = content->lifetime().make_state<ZenTransitionState>();
 	state->content = content.get();
 

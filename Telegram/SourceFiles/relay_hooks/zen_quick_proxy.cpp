@@ -25,7 +25,7 @@ ZenQuickProxyWidget::ZenQuickProxyWidget(
 		Window::SessionController *controller)
 : Ui::RpWidget(parent)
 , _controller(controller) {
-	resize(56, 28);
+	resize(32, 32);
 	setCursor(style::cur_pointer);
 	setMouseTracking(true);
 
@@ -43,6 +43,22 @@ ZenQuickProxyWidget::ZenQuickProxyWidget(
 
 void ZenQuickProxyWidget::updateState() {
 	setVisible(RelayHooks::Instance().isQuickProxyEnabled());
+	const auto &proxySettings = Core::App().settings().proxy();
+	const auto enabled = (proxySettings.settings() == MTP::ProxyData::Settings::Enabled);
+	const auto ws = RelayHooks::Instance().isWsProxyEnabled();
+	if (ws) {
+		setToolTip((_pingMs > 0)
+			? QString::fromUtf8("WS Proxy: %1 ms").arg(_pingMs)
+			: QString::fromUtf8("WS Proxy (вкл.)"));
+	} else if (enabled) {
+		setToolTip((_pingMs > 0)
+			? QString::fromUtf8("Прокси: %1 ms").arg(_pingMs)
+			: (_pingMs < 0
+				? QString::fromUtf8("Прокси: нет ответа")
+				: QString::fromUtf8("Прокси (вкл.)")));
+	} else {
+		setToolTip(QString::fromUtf8("Прокси отключён (ЛКМ — выбрать, ПКМ — вкл/выкл)"));
+	}
 	update();
 }
 
@@ -96,19 +112,19 @@ void ZenQuickProxyWidget::measurePing() {
 		_pingMs = std::max(1, int(_pingClock.elapsed()));
 		sock->abort();
 		sock->deleteLater();
-		update();
+		updateState();
 	});
 	connect(sock, &QTcpSocket::errorOccurred, this, [this, sock, timeout](QAbstractSocket::SocketError) {
 		timeout->stop();
 		_pingMs = -1;
 		sock->deleteLater();
-		update();
+		updateState();
 	});
 	connect(timeout, &QTimer::timeout, this, [this, sock] {
 		_pingMs = -1;
 		sock->abort();
 		sock->deleteLater();
-		update();
+		updateState();
 	});
 	sock->connectToHost(host, port);
 }
@@ -117,36 +133,33 @@ void ZenQuickProxyWidget::paintEvent(QPaintEvent *e) {
 	auto p = QPainter(this);
 	p.setRenderHint(QPainter::Antialiasing);
 
-	const auto r = QRectF(rect()).adjusted(0.5, 0.5, -0.5, -0.5);
-	auto bg = st::windowFg->c;
-	bg.setAlphaF(_hovered ? 0.12 : 0.06);
-	p.setPen(Qt::NoPen);
-	p.setBrush(bg);
-	p.drawRoundedRect(r, 14.0, 14.0);
+	if (_hovered) {
+		auto hoverBg = st::windowFg->c;
+		hoverBg.setAlphaF(0.08);
+		p.setPen(Qt::NoPen);
+		p.setBrush(hoverBg);
+		p.drawEllipse(QRectF(rect()).adjusted(1.0, 1.0, -1.0, -1.0));
+	}
 
 	const auto &proxySettings = Core::App().settings().proxy();
 	const auto enabled = (proxySettings.settings() == MTP::ProxyData::Settings::Enabled);
 	const auto ws = RelayHooks::Instance().isWsProxyEnabled();
 
-	QColor dotColor = st::windowSubTextFg->c;
-	QString label = "OFF";
+	const auto iconColor = (ws
+		? QColor(0x2b, 0x3c, 0xff)
+		: (enabled ? st::windowBgActive->c : st::windowSubTextFg->c));
+	const auto iconLeft = (width() - st::menuIconPermissions.width()) / 2;
+	const auto iconTop = (height() - st::menuIconPermissions.height()) / 2;
+	st::menuIconPermissions.paint(p, iconLeft, iconTop, width(), iconColor);
+
 	if (enabled || ws) {
-		if (_pingMs < 0) {
-			dotColor = QColor(255, 159, 10);
-			label = "--";
-		} else {
-			dotColor = ws ? QColor(0x2b, 0x3c, 0xff) : QColor(52, 199, 89);
-			label = (_pingMs > 0) ? QString("%1ms").arg(std::min(_pingMs, 999)) : QString("ON");
-		}
+		const auto dotColor = (_pingMs < 0)
+			? QColor(255, 159, 10)
+			: (ws ? QColor(0x2b, 0x3c, 0xff) : QColor(52, 199, 89));
+		p.setPen(QPen(st::windowBg->c, 1.5));
+		p.setBrush(dotColor);
+		p.drawEllipse(QRectF(width() - 9.0, height() - 9.0, 6.0, 6.0));
 	}
-
-	p.setBrush(dotColor);
-	p.drawEllipse(QRectF(7.0, (height() - 6.0) / 2.0, 6.0, 6.0));
-
-	auto f = st::semiboldFont;
-	p.setFont(f);
-	p.setPen(enabled || ws ? st::windowFg->c : st::windowSubTextFg->c);
-	p.drawText(QRectF(15.0, 0.0, width() - 18.0, height()), Qt::AlignCenter, label);
 }
 
 void ZenQuickProxyWidget::toggleProxyQuick() {
@@ -177,6 +190,16 @@ void ZenQuickProxyWidget::showMenu() {
 	const auto &proxySettings = Core::App().settings().proxy();
 	const auto enabled = (proxySettings.settings() == MTP::ProxyData::Settings::Enabled);
 	const auto selected = proxySettings.selected();
+	const auto wsOn = RelayHooks::Instance().isWsProxyEnabled();
+
+	const auto pingText = wsOn
+		? ((_pingMs > 0) ? QString::fromUtf8("WS Proxy • %1 ms").arg(_pingMs) : QString::fromUtf8("WS Proxy активен"))
+		: (enabled
+			? ((_pingMs > 0) ? QString::fromUtf8("Пинг прокси: %1 ms").arg(_pingMs) : QString::fromUtf8("Прокси активен"))
+			: QString::fromUtf8("Прокси отключён"));
+	const auto headerAct = _menu->addAction(pingText, [] {});
+	headerAct->setEnabled(false);
+	_menu->addSeparator();
 
 	for (const auto &item : proxySettings.list()) {
 		const auto isCurrent = enabled
@@ -203,7 +226,6 @@ void ZenQuickProxyWidget::showMenu() {
 		_menu->addSeparator();
 	}
 
-	const auto wsOn = RelayHooks::Instance().isWsProxyEnabled();
 	_menu->addAction(
 		QString::fromUtf8(wsOn ? "✓ WS Proxy (ZenDesktop)" : "WS Proxy (ZenDesktop)"),
 		[this, wsOn] {
@@ -215,7 +237,7 @@ void ZenQuickProxyWidget::showMenu() {
 				ZenWsProxy::Instance().stop();
 			}
 			measurePing();
-			update();
+			updateState();
 		});
 
 	_menu->addAction(QString::fromUtf8("Отключить прокси"), [this] {
@@ -227,7 +249,7 @@ void ZenQuickProxyWidget::showMenu() {
 		}
 		Core::App().saveSettingsDelayed();
 		measurePing();
-		update();
+		updateState();
 	});
 
 	if (_controller) {
