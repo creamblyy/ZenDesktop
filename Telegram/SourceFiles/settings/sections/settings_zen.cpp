@@ -743,7 +743,7 @@ void ZenAppearance::setupContent() {
 		rpl::single(QString::fromUtf8("Шрифт интерфейса")),
 		fontFamilyVar->value() | rpl::map([](const QString &f) {
 			return f.isEmpty()
-				? QString::fromUtf8("По умолчанию")
+				? QString::fromUtf8("Open Sans SemiBold")
 				: (f == style::SystemFontTag())
 				? QString::fromUtf8("Системный")
 				: f;

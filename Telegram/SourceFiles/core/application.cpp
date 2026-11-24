@@ -433,7 +433,10 @@ void Application::run() {
 
 	startLocalStorage();
 
-	style::SetCustomFont(settings().customFontFamily());
+	const auto customFont = settings().customFontFamily();
+	style::SetCustomFont(customFont.isEmpty()
+		? QStringLiteral("Open Sans SemiBold")
+		: customFont);
 	style::internal::StartFonts();
 
 	Test::ApplyStartupOverrides();
