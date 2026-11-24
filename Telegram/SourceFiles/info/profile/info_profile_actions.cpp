@@ -2030,6 +2030,19 @@ BlockPart DetailsFiller::makeInfo() {
 			idStr);
 	}
 	result->paintRequest() | rpl::on_next([=] {
+		auto p = QPainter(result);
+		p.setRenderHint(QPainter::Antialiasing);
+		const auto m3 = Relay::RelayHooks::Instance().isMaterial3BubblesEnabled();
+		if (m3 && result->width() > 32 && result->height() > 16) {
+			const auto cardRect = QRectF(result->rect()).adjusted(12.0, 2.0, -12.0, -2.0);
+			auto bg = st::windowFg->c;
+			bg.setAlphaF(0.055);
+			auto border = st::windowFg->c;
+			border.setAlphaF(0.09);
+			p.setBrush(bg);
+			p.setPen(QPen(border, 1.0));
+			p.drawRoundedRect(cardRect, 16.0, 16.0);
+		}
 		std::vector<QWidget*> rows;
 		const auto minRowWidth = result->width() / 2;
 		for (auto *child : result->children()) {
@@ -2045,13 +2058,13 @@ BlockPart DetailsFiller::makeInfo() {
 		std::sort(rows.begin(), rows.end(), [](const QWidget *a, const QWidget *b) {
 			return a->y() < b->y();
 		});
-		auto p = QPainter(result);
 		auto c = st::windowFg->c;
 		c.setAlphaF(0.08);
-		const auto left = st::infoProfileLabeledPadding.left();
-		const auto right = st::infoProfileLabeledPadding.right();
+		const auto left = m3 ? 24 : st::infoProfileLabeledPadding.left();
+		const auto right = m3 ? 24 : st::infoProfileLabeledPadding.right();
 		const auto lineWidth = std::max(0, result->width() - left - right);
 		if (lineWidth > 0) {
+			p.setPen(Qt::NoPen);
 			for (size_t i = 0; i + 1 < rows.size(); ++i) {
 				const auto *w = rows[i];
 				p.fillRect(left, w->y() + w->height() - 3, lineWidth, 1, c);
@@ -3635,12 +3648,100 @@ void ActionsFiller::fillChannelActions(
 	}
 }
 
+void ApplyM3ProfileButtons(not_null<QWidget*> container) {
+	if (!Relay::RelayHooks::Instance().isMaterial3BubblesEnabled()) {
+		return;
+	}
+	const auto buttons = std::make_shared<std::vector<QPointer<Ui::SettingsButton>>>();
+	for (auto *btn : container->findChildren<Ui::SettingsButton*>()) {
+		buttons->push_back(btn);
+	}
+	if (buttons->empty()) {
+		return;
+	}
+	for (const auto &btnPtr : *buttons) {
+		auto *btn = btnPtr.data();
+		if (!btn) {
+			continue;
+		}
+		btn->paintRequest() | rpl::on_next([=] {
+			std::vector<QWidget*> visible;
+			visible.reserve(buttons->size());
+			for (const auto &other : *buttons) {
+				if (other && other->isVisible() && other->height() > 0) {
+					visible.push_back(other.data());
+				}
+			}
+			if (visible.empty()) {
+				return;
+			}
+			std::sort(visible.begin(), visible.end(), [&](const QWidget *a, const QWidget *b) {
+				return a->mapTo(container.get(), QPoint(0, 0)).y()
+					< b->mapTo(container.get(), QPoint(0, 0)).y();
+			});
+			const auto it = std::find(visible.begin(), visible.end(), btn);
+			if (it == visible.end()) {
+				return;
+			}
+			const auto isFirst = (it == visible.begin());
+			const auto isLast = (std::next(it) == visible.end());
+
+			auto p = QPainter(btn);
+			p.setRenderHint(QPainter::Antialiasing);
+			constexpr auto kMarginX = 12.0;
+			constexpr auto kOuterR = 16.0;
+			constexpr auto kInnerR = 4.0;
+			const auto w = double(btn->width());
+			const auto h = double(btn->height());
+			if (w <= 2.0 * kMarginX || h <= 4.0) {
+				return;
+			}
+			const auto x1 = kMarginX;
+			const auto x2 = w - kMarginX;
+			const auto y1 = isFirst ? 0.5 : 1.5;
+			const auto y2 = isLast ? (h - 0.5) : (h - 1.5);
+			const auto rt = isFirst ? kOuterR : kInnerR;
+			const auto rb = isLast ? kOuterR : kInnerR;
+
+			QPainterPath cardPath;
+			cardPath.moveTo(x1 + rt, y1);
+			cardPath.lineTo(x2 - rt, y1);
+			cardPath.arcTo(QRectF(x2 - 2.0 * rt, y1, 2.0 * rt, 2.0 * rt), 90.0, -90.0);
+			cardPath.lineTo(x2, y2 - rb);
+			cardPath.arcTo(QRectF(x2 - 2.0 * rb, y2 - 2.0 * rb, 2.0 * rb, 2.0 * rb), 0.0, -90.0);
+			cardPath.lineTo(x1 + rb, y2);
+			cardPath.arcTo(QRectF(x1, y2 - 2.0 * rb, 2.0 * rb, 2.0 * rb), 270.0, -90.0);
+			cardPath.lineTo(x1, y1 + rt);
+			cardPath.arcTo(QRectF(x1, y1, 2.0 * rt, 2.0 * rt), 180.0, -90.0);
+			cardPath.closeSubpath();
+
+			QPainterPath full;
+			full.addRect(QRectF(0.0, 0.0, w, h));
+			const auto maskPath = full.subtracted(cardPath);
+
+			auto tint = st::windowFg->c;
+			tint.setAlphaF(0.055);
+			auto border = st::windowFg->c;
+			border.setAlphaF(0.09);
+			p.fillPath(maskPath, st::windowBg->c);
+			p.fillPath(cardPath, tint);
+			p.setPen(QPen(border, 1.0));
+			p.drawPath(cardPath);
+		}, btn->lifetime());
+	}
+}
+
 void ActionsFiller::fill() {
 	if (const auto user = _peer->asUser()) {
 		fillUserActions(user);
 	} else if (const auto channel = _peer->asChannel()) {
 		if (!channel->isMegagroup()) {
 			fillChannelActions(channel);
+		}
+	}
+	for (auto *child : _blocks.layout()->children()) {
+		if (auto *v = qobject_cast<Ui::VerticalLayout*>(child)) {
+			ApplyM3ProfileButtons(v);
 		}
 	}
 }
@@ -3873,6 +3974,7 @@ object_ptr<Ui::RpWidget> SetupChannelMembersAndManage(
 			std::move(adminsShown)
 		) | rpl::map(rpl::mappers::_1 || rpl::mappers::_2));
 
+	ApplyM3ProfileButtons(result->entity());
 	result->entity()->add(CreateSkipWidget(result));
 
 	return result;

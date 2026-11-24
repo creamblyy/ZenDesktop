@@ -20,7 +20,9 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "window/section_widget.h"
 #include "window/window_session_controller.h"
 #include "history/view/controls/history_view_bot_menu_button.h"
+#include "ui/effects/animations.h"
 #include "ui/effects/message_sending_history.h"
+#include "ui/rp_widget.h"
 #include "ui/widgets/fields/input_field.h"
 #include "mtproto/sender.h"
 #include "tgw/tgw_scroll.h"
@@ -1013,6 +1015,11 @@ private:
 	QString _confirmSource;
 
 	std::unique_ptr<Window::SlideAnimation> _showAnimation;
+
+	object_ptr<Ui::RpWidget> _zenChatTransition = { nullptr };
+	Ui::Animations::Simple _zenChatTransitionAnim;
+	QPixmap _zenOldChatPixmap;
+	QPixmap _zenNewChatPixmap;
 
 	HistoryView::ElementHighlighter _highlighter;
 

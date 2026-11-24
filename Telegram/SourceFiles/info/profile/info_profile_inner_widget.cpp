@@ -6,6 +6,10 @@ For license and copyright information please follow this link:
 https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "info/profile/info_profile_inner_widget.h"
+#include "relay_hooks/relay_hooks.h"
+#include "base/event_filter.h"
+#include "ui/widgets/box_content_divider.h"
+#include <QtGui/QPainter>
 
 #include "info/info_controller.h"
 #include "info/info_memento.h"
@@ -351,6 +355,17 @@ object_ptr<Ui::RpWidget> InnerWidget::setupContent(
 	}
 	if (tabs) {
 		addTabsHost();
+	}
+	if (Relay::RelayHooks::Instance().isMaterial3BubblesEnabled()) {
+		for (auto *div : result->findChildren<Ui::BoxContentDivider*>()) {
+			base::install_event_filter(div, [=](not_null<QEvent*> e) {
+				if (e->type() == QEvent::Paint) {
+					QPainter(div).fillRect(div->rect(), st::windowBg->c);
+					return base::EventFilterResult::Cancel;
+				}
+				return base::EventFilterResult::Continue;
+			});
+		}
 	}
 	Ui::AddSkip(result.data(), skip);
 	return result;

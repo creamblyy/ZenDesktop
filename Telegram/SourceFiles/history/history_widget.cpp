@@ -6,6 +6,8 @@ For license and copyright information please follow this link:
 https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "history/history_widget.h"
+#include "relay_hooks/relay_hooks.h"
+#include <QtGui/QPainterPath>
 
 #include "api/api_compose_with_ai.h"
 #include "api/api_editing.h"
@@ -3274,6 +3276,22 @@ void HistoryWidget::showHistory(
 	_minPinnedId = std::nullopt;
 	_showAtMsgParams = {};
 
+	const auto zenPrevPeerId = _peer ? _peer->id : PeerId(0);
+	const auto zenAnimateOpen = Relay::RelayHooks::Instance().isSwissMotionEnabled()
+		&& peerId
+		&& (zenPrevPeerId != peerId)
+		&& !_showAnimation
+		&& (params.animated != anim::type::instant);
+	if (_zenChatTransition) {
+		_zenChatTransitionAnim.stop();
+		_zenChatTransition->hide();
+	}
+	_zenOldChatPixmap = QPixmap();
+	_zenNewChatPixmap = QPixmap();
+	if (zenAnimateOpen && _scroll && !_scroll->isHidden() && !_scroll->size().isEmpty()) {
+		_zenOldChatPixmap = Ui::GrabWidget(this, _scroll->geometry());
+	}
+
 	const auto wasState = controller()->dialogsEntryStateCurrent();
 	const auto startBot = (showAtMsgId == ShowAndStartBotMsgId);
 	_showAndMaybeSendStart = (showAtMsgId == ShowAndMaybeStartBotMsgId);
@@ -3733,6 +3751,51 @@ void HistoryWidget::showHistory(
 			_history,
 			FullMsgId(_history->peer->id, msgId) });
 	}
+	if (zenAnimateOpen
+		&& _history
+		&& _scroll
+		&& !_scroll->isHidden()
+		&& !_scroll->size().isEmpty()) {
+		_zenNewChatPixmap = Ui::GrabWidget(this, _scroll->geometry());
+		if (!_zenChatTransition) {
+			_zenChatTransition.create(this);
+			_zenChatTransition->setAttribute(Qt::WA_TransparentForMouseEvents);
+			_zenChatTransition->paintRequest() | rpl::on_next([=] {
+				QPainter p(_zenChatTransition.data());
+				p.setRenderHint(QPainter::SmoothPixmapTransform);
+				const auto v = _zenChatTransitionAnim.value(1.0);
+				if (!_zenOldChatPixmap.isNull()) {
+					p.setOpacity(1.0);
+					p.drawPixmap(QPointF(-12.0 * v, 0.0), _zenOldChatPixmap);
+				}
+				if (!_zenNewChatPixmap.isNull()) {
+					p.setOpacity(v);
+					p.drawPixmap(QPointF(0.0, 14.0 * (1.0 - v)), _zenNewChatPixmap);
+				}
+			}, _zenChatTransition->lifetime());
+		}
+		_zenChatTransition->setGeometry(_scroll->geometry());
+		_zenChatTransition->raise();
+		_zenChatTransition->show();
+		_zenChatTransitionAnim.start(
+			[=] {
+				if (_zenChatTransition) {
+					_zenChatTransition->update();
+				}
+				if (!_zenChatTransitionAnim.animating()) {
+					if (_zenChatTransition) {
+						_zenChatTransition->hide();
+					}
+					_zenOldChatPixmap = QPixmap();
+					_zenNewChatPixmap = QPixmap();
+				}
+			},
+			0.0,
+			1.0,
+			220,
+			anim::easeOutCubic);
+	}
+
 	update();
 	controller()->floatPlayerAreaUpdated();
 	session().data().itemVisibilitiesUpdated();
@@ -8458,6 +8521,9 @@ void HistoryWidget::updateControlsGeometry() {
 
 	_cornerButtons.updatePositions();
 	_pullToNext->updateGeometry();
+	if (_zenChatTransition && !_zenChatTransition->isHidden()) {
+		_zenChatTransition->setGeometry(_scroll->geometry());
+	}
 
 	if (_membersDropdown) {
 		_membersDropdown->setMaxHeight(countMembersDropdownHeightMax());
@@ -11516,6 +11582,23 @@ void HistoryWidget::drawField(Painter &p, const QRect &rect) {
 	p.setInactive(
 		controller()->isGifPausedAtLeastFor(Window::GifPauseReason::Any));
 	p.fillRect(myrtlrect(0, backy, width(), backh), st::historyReplyBg);
+	if (Relay::RelayHooks::Instance().isMaterial3BubblesEnabled()
+		&& _field
+		&& !_field->isHidden()
+		&& !isRecording()) {
+		const auto fieldRect = QRectF(_field->geometry()).adjusted(-8.0, -3.0, 8.0, 3.0);
+		if (fieldRect.width() > 24.0 && fieldRect.height() > 16.0) {
+			PainterHighQualityEnabler hq(p);
+			auto pillBg = st::windowFg->c;
+			pillBg.setAlphaF(0.055);
+			auto pillBorder = st::windowFg->c;
+			pillBorder.setAlphaF(0.08);
+			const auto radius = std::min(18.0, fieldRect.height() * 0.5);
+			p.setPen(QPen(pillBorder, 1.0));
+			p.setBrush(pillBg);
+			p.drawRoundedRect(fieldRect, radius, radius);
+		}
+	}
 
 	const auto media = (!_previewDrawPreview && drawMsgText)
 		? drawMsgText->media()

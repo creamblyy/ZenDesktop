@@ -50,6 +50,10 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "settings/cloud_password/settings_cloud_password_input.h"
 #include "settings/sections/settings_advanced.h"
 #include "settings/sections/settings_zen.h"
+#include "relay_hooks/relay_hooks.h"
+#include "ui/effects/animations.h"
+#include "window/section_widget.h"
+#include <QtWidgets/QGraphicsOpacityEffect>
 #include "settings/sections/settings_business.h"
 #include "settings/sections/settings_calls.h"
 #include "settings/sections/settings_chat.h"
@@ -408,10 +412,18 @@ void BuildSectionButtons(SectionBuilder &builder) {
 	const auto controller = builder.controller();
 	const auto showOther = builder.showOther();
 
-	builder.addSectionButton({
+	builder.addButton({
 		.title = rpl::single(u"Настройки ZenDesktop"_q),
-		.targetSection = ZenId(),
 		.icon = { &st::menuIconManage },
+		.onClick = [=] {
+			if (Relay::RelayHooks::Instance().isSwissMotionEnabled()) {
+				controller->showSettings(
+					ZenId(),
+					Window::SectionShow(anim::type::instant));
+			} else {
+				showOther(ZenId());
+			}
+		},
 		.keywords = { u"zen"_q, u"zendesktop"_q, u"relay"_q, u"hooks"_q, u"ghost"_q, u"anti-recall"_q },
 	});
 
@@ -735,6 +747,8 @@ private:
 	void setupContent();
 
 	QPointer<Ui::UserpicButton> _userpic;
+	QPointer<Ui::VerticalLayout> _content;
+	Ui::Animations::Simple _revealAnim;
 
 };
 
@@ -782,6 +796,7 @@ void Main::keyPressEvent(QKeyEvent *e) {
 
 void Main::setupContent() {
 	const auto content = Ui::CreateChild<Ui::VerticalLayout>(this);
+	_content = content;
 
 	const auto window = controller();
 	const auto session = &window->session();
@@ -912,6 +927,12 @@ void Main::setupContent() {
 
 	Ui::ResizeFitChild(this, content);
 
+	if (Relay::RelayHooks::Instance().isSwissMotionEnabled()) {
+		auto *effect = new QGraphicsOpacityEffect(content);
+		effect->setOpacity(0.0);
+		content->setGraphicsEffect(effect);
+	}
+
 	session->api().cloudPassword().reload();
 	session->api().reloadContactSignupSilent();
 	session->api().sensitiveContent().reload();
@@ -922,6 +943,35 @@ void Main::setupContent() {
 }
 
 void Main::showFinished() {
+	if (_content && Relay::RelayHooks::Instance().isSwissMotionEnabled()) {
+		auto *effect = qobject_cast<QGraphicsOpacityEffect*>(_content->graphicsEffect());
+		if (!effect) {
+			effect = new QGraphicsOpacityEffect(_content.data());
+			_content->setGraphicsEffect(effect);
+		}
+		effect->setOpacity(0.0);
+		const auto weakContent = _content;
+		_revealAnim.start(
+			[=] {
+				if (!weakContent) {
+					return;
+				}
+				const auto v = _revealAnim.value(1.0);
+				if (auto *eff = qobject_cast<QGraphicsOpacityEffect*>(weakContent->graphicsEffect())) {
+					eff->setOpacity(v);
+				}
+				if (!_revealAnim.animating()) {
+					weakContent->setGraphicsEffect(nullptr);
+				}
+			},
+			0.0,
+			1.0,
+			220,
+			anim::easeOutCubic);
+	} else if (_content) {
+		_content->setGraphicsEffect(nullptr);
+	}
+
 	controller()->checkHighlightControl(u"profile-photo"_q, _userpic.data(), {
 		.margin = st::settingsPhotoHighlightMargin,
 		.shape = HighlightShape::Ellipse,

@@ -716,6 +716,11 @@ void MainMenu::prepareSiteRevealAnimation() {
 	for (auto *child : _menu->children()) {
 		addHiddenTarget(qobject_cast<QWidget*>(child));
 	}
+	if (_menu) {
+		auto *menuEff = new QGraphicsOpacityEffect(_menu);
+		menuEff->setOpacity(0.0);
+		_menu->setGraphicsEffect(menuEff);
+	}
 	addHiddenTarget(_footer.get());
 	_revealPrepared = !_revealItems.empty();
 }
@@ -752,6 +757,9 @@ void MainMenu::startSiteRevealAnimation() {
 	_revealItems.clear();
 
 	if (targets.empty()) {
+		if (_menu) {
+			_menu->setGraphicsEffect(nullptr);
+		}
 		return;
 	}
 
@@ -774,6 +782,9 @@ void MainMenu::startSiteRevealAnimation() {
 			.delayMs = static_cast<int>(i) * kSiteRevealStaggerMs,
 			.hasShift = true,
 		});
+	}
+	if (_menu) {
+		_menu->setGraphicsEffect(nullptr);
 	}
 
 	_revealTotalMs = static_cast<int>(_revealItems.size() - 1) * kSiteRevealStaggerMs
@@ -816,6 +827,9 @@ void MainMenu::updateSiteRevealAnimation(float64 progress) {
 void MainMenu::finishSiteRevealAnimation() {
 	_revealPrepared = false;
 	_revealAnimation.stop();
+	if (_menu) {
+		_menu->setGraphicsEffect(nullptr);
+	}
 	for (const auto &item : _revealItems) {
 		if (item.widget) {
 			if (item.hasShift) {

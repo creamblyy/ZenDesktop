@@ -127,6 +127,7 @@ struct ZenTransitionItem {
 };
 
 struct ZenTransitionState {
+	QPointer<QWidget> content;
 	std::vector<ZenTransitionItem> items;
 	Ui::Animations::Simple revealAnimation;
 	Ui::Animations::Simple exitAnimation;
@@ -149,14 +150,21 @@ void FinishZenReveal(ZenTransitionState *state) {
 		}
 	}
 	state->items.clear();
+	if (state->content) {
+		state->content->setGraphicsEffect(nullptr);
+	}
 }
 
 void AttachZenSectionTransition(
 		not_null<AbstractSection*> section,
 		not_null<Ui::VerticalLayout*> content) {
 	const auto state = content->lifetime().make_state<ZenTransitionState>();
+	state->content = content.get();
 
 	if (Relay::RelayHooks::Instance().isSwissMotionEnabled()) {
+		auto *rootEff = new QGraphicsOpacityEffect(content);
+		rootEff->setOpacity(0.0);
+		content->setGraphicsEffect(rootEff);
 		for (auto *child : content->children()) {
 			if (auto *w = qobject_cast<QWidget*>(child)) {
 				if (!w->isHidden()) {
@@ -188,7 +196,6 @@ void AttachZenSectionTransition(
 		state->exitAnimation.stop();
 		state->navigating = false;
 		content->setProperty("zen_navigating", false);
-		content->setGraphicsEffect(nullptr);
 
 		if (!Relay::RelayHooks::Instance().isSwissMotionEnabled()) {
 			FinishZenReveal(state);
@@ -220,6 +227,7 @@ void AttachZenSectionTransition(
 		state->items.clear();
 
 		if (targets.empty()) {
+			content->setGraphicsEffect(nullptr);
 			return;
 		}
 
@@ -243,6 +251,9 @@ void AttachZenSectionTransition(
 				.hasShift = true,
 			});
 		}
+
+		// Only reveal root container after every child is hidden at opacity 0.0.
+		content->setGraphicsEffect(nullptr);
 
 		state->totalMs = static_cast<int>(state->items.size() - 1) * kZenRevealStaggerMs
 			+ kZenRevealMoveMs;
@@ -314,7 +325,7 @@ void NavigateZenSectionWithExit(
 			}
 			if (!anim->animating()) {
 				if (const auto strong = weakCtrl.get()) {
-					strong->showSettings(target);
+					strong->showSettings(target, Window::SectionShow(anim::type::instant));
 				}
 				base::call_delayed(250, guard.data(), [=] {
 					if (guard) {

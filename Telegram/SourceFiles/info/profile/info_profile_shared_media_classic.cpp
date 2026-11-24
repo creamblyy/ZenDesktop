@@ -6,6 +6,9 @@ For license and copyright information please follow this link:
 https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "info/profile/info_profile_shared_media_classic.h"
+#include "relay_hooks/relay_hooks.h"
+#include <QtGui/QPainter>
+#include <QtGui/QPainterPath>
 
 #include "core/ui_integration.h"
 #include "data/components/recent_shared_media_gifts.h"
@@ -369,6 +372,83 @@ object_ptr<Ui::SlideWrap<Ui::RpWidget>> SetupSharedMediaClassic(
 		st::infoSlideDuration
 	)->toggleOn(
 		tracker.atLeastOneShownValue());
+	if (Relay::RelayHooks::Instance().isMaterial3BubblesEnabled()) {
+		const auto scope = content.data();
+		const auto buttons = std::make_shared<std::vector<QPointer<Ui::SettingsButton>>>();
+		for (auto *btn : scope->findChildren<Ui::SettingsButton*>()) {
+			buttons->push_back(btn);
+		}
+		for (const auto &btnPtr : *buttons) {
+			auto *btn = btnPtr.data();
+			if (!btn) {
+				continue;
+			}
+			btn->paintRequest() | rpl::on_next([=] {
+				std::vector<QWidget*> visible;
+				visible.reserve(buttons->size());
+				for (const auto &other : *buttons) {
+					if (other && other->isVisible() && other->height() > 0) {
+						visible.push_back(other.data());
+					}
+				}
+				if (visible.empty()) {
+					return;
+				}
+				std::sort(visible.begin(), visible.end(), [&](const QWidget *a, const QWidget *b) {
+					return a->mapTo(scope, QPoint(0, 0)).y()
+						< b->mapTo(scope, QPoint(0, 0)).y();
+				});
+				const auto it = std::find(visible.begin(), visible.end(), btn);
+				if (it == visible.end()) {
+					return;
+				}
+				const auto isFirst = (it == visible.begin());
+				const auto isLast = (std::next(it) == visible.end());
+
+				auto p = QPainter(btn);
+				p.setRenderHint(QPainter::Antialiasing);
+				constexpr auto kMarginX = 12.0;
+				constexpr auto kOuterR = 16.0;
+				constexpr auto kInnerR = 4.0;
+				const auto w = double(btn->width());
+				const auto h = double(btn->height());
+				if (w <= 2.0 * kMarginX || h <= 4.0) {
+					return;
+				}
+				const auto x1 = kMarginX;
+				const auto x2 = w - kMarginX;
+				const auto y1 = isFirst ? 0.5 : 1.5;
+				const auto y2 = isLast ? (h - 0.5) : (h - 1.5);
+				const auto rt = isFirst ? kOuterR : kInnerR;
+				const auto rb = isLast ? kOuterR : kInnerR;
+
+				QPainterPath cardPath;
+				cardPath.moveTo(x1 + rt, y1);
+				cardPath.lineTo(x2 - rt, y1);
+				cardPath.arcTo(QRectF(x2 - 2.0 * rt, y1, 2.0 * rt, 2.0 * rt), 90.0, -90.0);
+				cardPath.lineTo(x2, y2 - rb);
+				cardPath.arcTo(QRectF(x2 - 2.0 * rb, y2 - 2.0 * rb, 2.0 * rb, 2.0 * rb), 0.0, -90.0);
+				cardPath.lineTo(x1 + rb, y2);
+				cardPath.arcTo(QRectF(x1, y2 - 2.0 * rb, 2.0 * rb, 2.0 * rb), 270.0, -90.0);
+				cardPath.lineTo(x1, y1 + rt);
+				cardPath.arcTo(QRectF(x1, y1, 2.0 * rt, 2.0 * rt), 180.0, -90.0);
+				cardPath.closeSubpath();
+
+				QPainterPath full;
+				full.addRect(QRectF(0.0, 0.0, w, h));
+				const auto maskPath = full.subtracted(cardPath);
+
+				auto tint = st::windowFg->c;
+				tint.setAlphaF(0.055);
+				auto border = st::windowFg->c;
+				border.setAlphaF(0.09);
+				p.fillPath(maskPath, st::windowBg->c);
+				p.fillPath(cardPath, tint);
+				p.setPen(QPen(border, 1.0));
+				p.drawPath(cardPath);
+			}, btn->lifetime());
+		}
+	}
 	result->entity()->add(std::move(content));
 
 	return result;
