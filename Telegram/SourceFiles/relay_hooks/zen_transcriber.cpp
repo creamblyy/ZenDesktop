@@ -28,6 +28,8 @@ extern "C" {
 #include <QtNetwork/QNetworkAccessManager>
 #include <QtNetwork/QNetworkReply>
 #include <QtNetwork/QNetworkRequest>
+#include <atomic>
+#include <chrono>
 
 namespace Relay {
 namespace {
@@ -86,6 +88,14 @@ bool DecodeToWav16kMono(const QString &inputPath, const QString &wavPath) {
 	QByteArray pcm;
 	AVPacket *pkt = av_packet_alloc();
 	AVFrame *frame = av_frame_alloc();
+	if (!pkt || !frame) {
+		av_frame_free(&frame);
+		av_packet_free(&pkt);
+		swr_free(&swr);
+		avcodec_free_context(&ctx);
+		avformat_close_input(&fmt);
+		return false;
+	}
 
 	auto drainFrame = [&](AVFrame *f) {
 		const int maxOut = swr_get_out_samples(swr, f ? f->nb_samples : 0);
@@ -169,6 +179,11 @@ bool DecodeToWav16kMono(const QString &inputPath, const QString &wavPath) {
 }
 
 void TranscribeViaApi(const QString &filePath, const QString &apiUrl, const QString &apiKey, ZenTranscriber::Callback done) {
+	const QUrl url(apiUrl);
+	if (!url.isValid() || (url.scheme() != "http" && url.scheme() != "https")) {
+		done(false, QString::fromUtf8("Некорректный URL для Whisper API."));
+		return;
+	}
 	auto *file = new QFile(filePath);
 	if (!file->open(QIODevice::ReadOnly)) {
 		delete file;
@@ -191,7 +206,9 @@ void TranscribeViaApi(const QString &filePath, const QString &apiUrl, const QStr
 	multi->append(modelPart);
 
 	auto *net = new QNetworkAccessManager();
-	QNetworkRequest req((QUrl(apiUrl)));
+	QNetworkRequest req(url);
+	req.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::NoLessSafeRedirectPolicy);
+	req.setTransferTimeout(std::chrono::milliseconds(60000));
 	if (!apiKey.isEmpty()) {
 		req.setRawHeader("Authorization", QString("Bearer %1").arg(apiKey).toUtf8());
 	}
@@ -201,8 +218,9 @@ void TranscribeViaApi(const QString &filePath, const QString &apiUrl, const QStr
 	QObject::connect(reply, &QNetworkReply::finished, [reply, net, done = std::move(done)] {
 		reply->deleteLater();
 		net->deleteLater();
-		if (reply->error() != QNetworkReply::NoError) {
-			done(false, QString::fromUtf8("Ошибка API: %1").arg(reply->errorString()));
+		const auto status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+		if (reply->error() != QNetworkReply::NoError || status >= 400) {
+			done(false, QString::fromUtf8("Ошибка API (HTTP %1): %2").arg(status).arg(reply->errorString()));
 			return;
 		}
 		const auto doc = QJsonDocument::fromJson(reply->readAll());
@@ -264,11 +282,14 @@ void ZenTranscriber::TranscribeFile(const QString &filePath, Callback done) {
 	const auto exePath = WhisperExePath();
 	const auto modelPath = WhisperModelPath();
 	const auto tempDir = QStandardPaths::writableLocation(QStandardPaths::TempLocation);
+	static std::atomic<uint64_t> counter{0};
+	const auto seq = counter.fetch_add(1, std::memory_order_relaxed);
 	const auto wavPath = QDir(tempDir).filePath(
-		QString("zen_transcribe_%1.wav").arg(QCoreApplication::applicationPid()));
+		QString("zen_transcribe_%1_%2.wav").arg(QCoreApplication::applicationPid()).arg(seq));
 
 	auto *thread = QThread::create([filePath, wavPath, exePath, modelPath, done = std::move(done)]() mutable {
 		if (!DecodeToWav16kMono(filePath, wavPath)) {
+			QFile::remove(wavPath);
 			QMetaObject::invokeMethod(QCoreApplication::instance(), [done = std::move(done)] {
 				done(false, QString::fromUtf8("Не удалось декодировать аудиодорожку."));
 			}, Qt::QueuedConnection);
@@ -277,7 +298,10 @@ void ZenTranscriber::TranscribeFile(const QString &filePath, Callback done) {
 
 		QProcess proc;
 		proc.start(exePath, { "-m", modelPath, "-l", "auto", "-nt", "-np", "-f", wavPath });
-		proc.waitForFinished(60000);
+		if (!proc.waitForFinished(60000)) {
+			proc.kill();
+			proc.waitForFinished(3000);
+		}
 		QFile::remove(wavPath);
 
 		const auto out = QString::fromUtf8(proc.readAllStandardOutput()).trimmed();

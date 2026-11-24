@@ -3,6 +3,7 @@ This file is part of Telegram Desktop fork - ZenDesktop with RelayHooks.
 */
 #include "relay_hooks/zen_updater.h"
 #include "relay_hooks/zen_badges.h"
+#include "base/weak_ptr.h"
 #include "logs.h"
 #include "lang/lang_keys.h"
 #include "window/window_session_controller.h"
@@ -16,9 +17,11 @@ This file is part of Telegram Desktop fork - ZenDesktop with RelayHooks.
 #include "styles/style_boxes.h"
 #include "styles/style_layers.h"
 
+#include <chrono>
 #include <functional>
 #include <memory>
 #include <QtCore/QCoreApplication>
+#include <QtCore/QCryptographicHash>
 #include <QtCore/QDir>
 #include <QtCore/QFile>
 #include <QtCore/QFileInfo>
@@ -41,6 +44,44 @@ constexpr auto kUpdateManifestUrl = "https://creamblyy.github.io/ZenDesktop/upda
 constexpr auto kCheckIntervalMs = 90 * 60 * 1000; // 1.5 hours (90 minutes)
 constexpr auto kInitialCheckDelayMs = 12 * 1000;      // 12 seconds after launch
 
+base::weak_ptr<Window::SessionController> gWeakController;
+
+[[nodiscard]] bool ValidateDownloadedExe(
+		const QString &path,
+		const QString &expectedSha256,
+		QString &errorOut) {
+	QFile f(path);
+	if (!f.open(QIODevice::ReadOnly)) {
+		errorOut = QString::fromUtf8("Не удалось открыть скачанный файл.");
+		return false;
+	}
+	if (f.size() < 512 * 1024) {
+		errorOut = QString::fromUtf8("Файл обновления слишком мал и повреждён.");
+		return false;
+	}
+	const auto magic = f.peek(2);
+	if (magic.size() < 2 || magic[0] != 'M' || magic[1] != 'Z') {
+		errorOut = QString::fromUtf8("Скачанный файл не является исполняемым файлом Windows.");
+		return false;
+	}
+	const auto expected = expectedSha256.trimmed().toLower();
+	if (!expected.isEmpty()) {
+		QCryptographicHash hash(QCryptographicHash::Sha256);
+		while (!f.atEnd()) {
+			const auto chunk = f.read(256 * 1024);
+			if (!chunk.isEmpty()) {
+				hash.addData(chunk);
+			}
+		}
+		const auto actual = QString::fromLatin1(hash.result().toHex()).toLower();
+		if (actual != expected) {
+			errorOut = QString::fromUtf8("Контрольная сумма SHA-256 обновления не совпала.");
+			return false;
+		}
+	}
+	return true;
+}
+
 } // namespace
 
 ZenUpdater &ZenUpdater::Instance() {
@@ -57,6 +98,7 @@ ZenUpdater::ZenUpdater() {
 void ZenUpdater::init(Window::SessionController *controller) {
 	if (controller) {
 		_controller = controller;
+		gWeakController = base::make_weak(controller);
 	}
 
 	QTimer::singleShot(kInitialCheckDelayMs, this, [this] {
@@ -69,6 +111,9 @@ void ZenUpdater::init(Window::SessionController *controller) {
 
 void ZenUpdater::setController(Window::SessionController *controller) {
 	_controller = controller;
+	gWeakController = controller
+		? base::make_weak(controller)
+		: base::weak_ptr<Window::SessionController>();
 }
 
 const QString &ZenUpdater::currentVersion() const {
@@ -113,6 +158,8 @@ void ZenUpdater::checkForUpdates(bool manual) {
 
 	auto req = QNetworkRequest(QUrl(manifestUrl));
 	req.setAttribute(QNetworkRequest::Http2AllowedAttribute, false);
+	req.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::NoLessSafeRedirectPolicy);
+	req.setTransferTimeout(std::chrono::milliseconds(15000));
 	req.setHeader(QNetworkRequest::UserAgentHeader, QString("ZenDesktop/%1").arg(kZenVersion));
 
 	auto *reply = _net.get(req);
@@ -120,11 +167,14 @@ void ZenUpdater::checkForUpdates(bool manual) {
 		_isChecking = false;
 		reply->deleteLater();
 
-		if (reply->error() != QNetworkReply::NoError) {
-			LOG(("ZenUpdater: Network error while checking: %1").arg(reply->errorString()));
-			if (manual && _controller) {
-				_controller->show(Ui::MakeInformBox(
-					QString("Ошибка при проверке обновлений:\n%1").arg(reply->errorString())));
+		const auto status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+		if (reply->error() != QNetworkReply::NoError || status < 200 || status >= 300) {
+			LOG(("ZenUpdater: Network error while checking (HTTP %1): %2").arg(status).arg(reply->errorString()));
+			if (manual) {
+				if (const auto ctrl = gWeakController.get()) {
+					ctrl->show(Ui::MakeInformBox(
+						QString::fromUtf8("Ошибка при проверке обновлений:\n%1").arg(reply->errorString())));
+				}
 			}
 			return;
 		}
@@ -164,14 +214,16 @@ void ZenUpdater::handleManifest(const QByteArray &data, bool manual) {
 		_updateAvailable = true;
 		_availableUpdate = info;
 		showUpdateModal(info);
-	} else if (manual && _controller) {
-		_controller->show(Ui::MakeInformBox(
-			QString("У вас установлена последняя версия ZenDesktop %1.").arg(kZenVersion)));
+	} else if (manual) {
+		if (const auto ctrl = gWeakController.get()) {
+			ctrl->show(Ui::MakeInformBox(
+				QString::fromUtf8("У вас установлена последняя версия ZenDesktop %1.").arg(kZenVersion)));
+		}
 	}
 }
 
 void ZenUpdater::showChangelog(Window::SessionController *controller) {
-	const auto ctrl = controller ? controller : _controller;
+	const auto ctrl = controller ? controller : gWeakController.get();
 	if (!ctrl) {
 		return;
 	}
@@ -193,14 +245,15 @@ void ZenUpdater::showChangelog(Window::SessionController *controller) {
 }
 
 void ZenUpdater::showUpdateModal(const ZenUpdateInfo &info) {
-	if (!_controller) {
+	const auto ctrl = gWeakController.get();
+	if (!ctrl) {
 		LOG(("ZenUpdater: Cannot show modal, controller is null"));
 		return;
 	}
 
 	const auto logoImg = ZenBadges::Instance().getBadgeImage(ZenBadgeType::Desktop);
 
-	_controller->show(Box([this, info, logoImg](not_null<Ui::GenericBox*> box) {
+	ctrl->show(Box([this, info, logoImg](not_null<Ui::GenericBox*> box) {
 		box->setWidth(st::boxWideWidth);
 		box->setNoContentMargin(true);
 
@@ -303,6 +356,10 @@ void ZenUpdater::showUpdateModal(const ZenUpdateInfo &info) {
 		// Hidden-until-download progress section
 		const auto progressRatio = std::make_shared<double>(0.0);
 		const auto activeReply = std::make_shared<QPointer<QNetworkReply>>();
+		const auto activeFile = std::make_shared<std::shared_ptr<QFile>>();
+		const auto downloadCompleted = std::make_shared<bool>(false);
+		const auto tempDir = QStandardPaths::writableLocation(QStandardPaths::TempLocation);
+		const auto targetPath = QDir(tempDir).filePath("ZenDesktop_update.exe");
 
 		auto progressWrapObj = object_ptr<Ui::SlideWrap<Ui::VerticalLayout>>(
 			layout,
@@ -348,12 +405,28 @@ void ZenUpdater::showUpdateModal(const ZenUpdateInfo &info) {
 		progressWrap->toggle(false, anim::type::instant);
 		layout->add(std::move(progressWrapObj));
 
+		box->lifetime().add([activeReply, activeFile, downloadCompleted, targetPath] {
+			if (!*downloadCompleted) {
+				if (*activeReply) {
+					(*activeReply)->abort();
+				}
+				if (*activeFile && (*activeFile)->isOpen()) {
+					(*activeFile)->close();
+				}
+				QFile::remove(targetPath);
+			}
+		});
+
 		const auto weakBox = QPointer<Ui::GenericBox>(box);
 		const auto startBoxDownload = std::make_shared<std::function<void()>>();
+		box->lifetime().add([startBoxDownload] {});
+		const auto weakRetry = std::weak_ptr<std::function<void()>>(startBoxDownload);
+
 		*startBoxDownload = [=] {
 			if (!weakBox || info.downloadUrl.isEmpty()) {
 				return;
 			}
+			*downloadCompleted = false;
 			*progressRatio = 0.0;
 			statusLabel->setTextColorOverride(std::nullopt);
 			statusLabel->setText(QString::fromUtf8("Подключение к серверу..."));
@@ -370,16 +443,37 @@ void ZenUpdater::showUpdateModal(const ZenUpdateInfo &info) {
 				}
 			});
 
-			const auto tempDir = QStandardPaths::writableLocation(QStandardPaths::TempLocation);
-			const auto targetPath = QDir(tempDir).filePath("ZenDesktop_update.exe");
+			auto outFile = std::make_shared<QFile>(targetPath);
+			if (!outFile->open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+				LOG(("ZenUpdater: Failed to open %1 for writing").arg(targetPath));
+				statusLabel->setTextColorOverride(QColor(235, 87, 87));
+				statusLabel->setText(QString::fromUtf8("Не удалось открыть временный файл обновления."));
+				weakBox->clearButtons();
+				weakBox->addButton(tr::lng_close(), [=] { weakBox->closeBox(); });
+				return;
+			}
+			*activeFile = outFile;
+			const auto writeOk = std::make_shared<bool>(true);
+
 			LOG(("ZenUpdater: Starting download %1 -> %2").arg(info.downloadUrl).arg(targetPath));
 
 			auto req = QNetworkRequest(QUrl(info.downloadUrl));
 			req.setAttribute(QNetworkRequest::Http2AllowedAttribute, false);
+			req.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::NoLessSafeRedirectPolicy);
+			req.setTransferTimeout(std::chrono::milliseconds(60000));
 			req.setHeader(QNetworkRequest::UserAgentHeader, QString("ZenDesktop/%1").arg(kZenVersion));
 
 			auto *reply = _net.get(req);
 			*activeReply = reply;
+
+			connect(reply, &QNetworkReply::readyRead, this, [reply, outFile, writeOk] {
+				const auto chunk = reply->readAll();
+				if (!chunk.isEmpty() && outFile->isOpen()) {
+					if (outFile->write(chunk) != chunk.size()) {
+						*writeOk = false;
+					}
+				}
+			});
 
 			connect(reply, &QNetworkReply::downloadProgress, this, [=](qint64 received, qint64 total) {
 				if (!weakBox) {
@@ -402,48 +496,72 @@ void ZenUpdater::showUpdateModal(const ZenUpdateInfo &info) {
 				rawBar->update();
 			});
 
-			connect(reply, &QNetworkReply::finished, this, [this, reply, targetPath, weakBox, statusLabel, progressRatio, rawBar, startBoxDownload] {
+			connect(reply, &QNetworkReply::finished, this, [this, info, reply, targetPath, outFile, writeOk, downloadCompleted, weakBox, statusLabel, progressRatio, rawBar, weakRetry] {
 				reply->deleteLater();
+				if (outFile->isOpen()) {
+					const auto tail = reply->readAll();
+					if (!tail.isEmpty() && outFile->write(tail) != tail.size()) {
+						*writeOk = false;
+					}
+					outFile->close();
+				}
+
+				const auto status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
 				if (reply->error() == QNetworkReply::OperationCanceledError) {
+					QFile::remove(targetPath);
 					return;
 				}
-				if (reply->error() != QNetworkReply::NoError) {
-					LOG(("ZenUpdater: Download failed: %1").arg(reply->errorString()));
+				if (reply->error() != QNetworkReply::NoError || status < 200 || status >= 300 || !*writeOk) {
+					QFile::remove(targetPath);
+					LOG(("ZenUpdater: Download failed (HTTP %1): %2").arg(status).arg(reply->errorString()));
 					if (weakBox) {
 						statusLabel->setTextColorOverride(QColor(235, 87, 87));
 						statusLabel->setText(QString::fromUtf8("Ошибка загрузки: %1").arg(reply->errorString()));
 						weakBox->clearButtons();
-						weakBox->addButton(rpl::single(QString::fromUtf8("Повторить")), [=] { (*startBoxDownload)(); });
+						weakBox->addButton(rpl::single(QString::fromUtf8("Повторить")), [weakRetry] {
+							if (const auto fn = weakRetry.lock(); fn && *fn) {
+								(*fn)();
+							}
+						});
 						weakBox->addButton(tr::lng_close(), [=] { weakBox->closeBox(); });
 					}
 					return;
 				}
 
-				QFile outFile(targetPath);
-				if (!outFile.open(QIODevice::WriteOnly)) {
-					LOG(("ZenUpdater: Failed to open %1 for writing").arg(targetPath));
+				QString validationErr;
+				if (!ValidateDownloadedExe(targetPath, info.sha256, validationErr)) {
+					QFile::remove(targetPath);
+					LOG(("ZenUpdater: Validation failed: %1").arg(validationErr));
 					if (weakBox) {
 						statusLabel->setTextColorOverride(QColor(235, 87, 87));
-						statusLabel->setText(QString::fromUtf8("Не удалось сохранить временный файл обновления."));
+						statusLabel->setText(validationErr);
 						weakBox->clearButtons();
+						weakBox->addButton(rpl::single(QString::fromUtf8("Повторить")), [weakRetry] {
+							if (const auto fn = weakRetry.lock(); fn && *fn) {
+								(*fn)();
+							}
+						});
 						weakBox->addButton(tr::lng_close(), [=] { weakBox->closeBox(); });
 					}
 					return;
 				}
-				outFile.write(reply->readAll());
-				outFile.close();
 
+				*downloadCompleted = true;
 				*progressRatio = 1.0;
 				if (weakBox) {
 					statusLabel->setText(QString::fromUtf8("Установка обновления..."));
 					rawBar->update();
 				}
-				LOG(("ZenUpdater: Download finished successfully (%1 bytes). Applying update...").arg(outFile.size()));
+				LOG(("ZenUpdater: Download finished successfully (%1 bytes). Applying update...").arg(QFileInfo(targetPath).size()));
 				launchUpdaterAndExit(targetPath);
 			});
 		};
 
-		box->addButton(rpl::single(QString::fromUtf8("Обновить")), [=] { (*startBoxDownload)(); });
+		box->addButton(rpl::single(QString::fromUtf8("Обновить")), [weakRetry] {
+			if (const auto fn = weakRetry.lock(); fn && *fn) {
+				(*fn)();
+			}
+		});
 		box->addButton(rpl::single(QString::fromUtf8("Позже")), [=] { box->closeBox(); });
 	}));
 }
@@ -459,42 +577,69 @@ void ZenUpdater::downloadAndInstall(const ZenUpdateInfo &info) {
 
 	LOG(("ZenUpdater: Starting download %1 -> %2").arg(info.downloadUrl).arg(targetPath));
 
-	if (_controller) {
-		_controller->show(Ui::MakeInformBox(
-			"Загрузка обновления началась в фоне. После завершения ZenDesktop перезапустится автоматически."));
+	if (const auto ctrl = gWeakController.get()) {
+		ctrl->show(Ui::MakeInformBox(
+			QString::fromUtf8("Загрузка обновления началась в фоне. После завершения ZenDesktop перезапустится автоматически.")));
 	}
 
 	startDownload(info.downloadUrl, targetPath);
 }
 
 void ZenUpdater::startDownload(const QString &url, const QString &targetPath) {
+	auto outFile = std::make_shared<QFile>(targetPath);
+	if (!outFile->open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+		LOG(("ZenUpdater: Failed to open %1 for writing").arg(targetPath));
+		return;
+	}
+	const auto writeOk = std::make_shared<bool>(true);
+
 	auto req = QNetworkRequest(QUrl(url));
 	req.setAttribute(QNetworkRequest::Http2AllowedAttribute, false);
+	req.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::NoLessSafeRedirectPolicy);
+	req.setTransferTimeout(std::chrono::milliseconds(60000));
 	req.setHeader(QNetworkRequest::UserAgentHeader, QString("ZenDesktop/%1").arg(kZenVersion));
 
 	auto *reply = _net.get(req);
-	connect(reply, &QNetworkReply::finished, this, [this, reply, targetPath] {
+	connect(reply, &QNetworkReply::readyRead, this, [reply, outFile, writeOk] {
+		const auto chunk = reply->readAll();
+		if (!chunk.isEmpty() && outFile->isOpen()) {
+			if (outFile->write(chunk) != chunk.size()) {
+				*writeOk = false;
+			}
+		}
+	});
+	connect(reply, &QNetworkReply::finished, this, [this, reply, targetPath, outFile, writeOk] {
 		reply->deleteLater();
+		if (outFile->isOpen()) {
+			const auto tail = reply->readAll();
+			if (!tail.isEmpty() && outFile->write(tail) != tail.size()) {
+				*writeOk = false;
+			}
+			outFile->close();
+		}
 
-		if (reply->error() != QNetworkReply::NoError) {
-			LOG(("ZenUpdater: Download failed: %1").arg(reply->errorString()));
-			if (_controller) {
-				_controller->show(Ui::MakeInformBox(
-					QString("Не удалось загрузить обновление:\n%1").arg(reply->errorString())));
+		const auto status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+		if (reply->error() != QNetworkReply::NoError || status < 200 || status >= 300 || !*writeOk) {
+			QFile::remove(targetPath);
+			LOG(("ZenUpdater: Download failed (HTTP %1): %2").arg(status).arg(reply->errorString()));
+			if (const auto ctrl = gWeakController.get()) {
+				ctrl->show(Ui::MakeInformBox(
+					QString::fromUtf8("Не удалось загрузить обновление:\n%1").arg(reply->errorString())));
 			}
 			return;
 		}
 
-		QFile outFile(targetPath);
-		if (!outFile.open(QIODevice::WriteOnly)) {
-			LOG(("ZenUpdater: Failed to open %1 for writing").arg(targetPath));
+		QString validationErr;
+		if (!ValidateDownloadedExe(targetPath, _availableUpdate.sha256, validationErr)) {
+			QFile::remove(targetPath);
+			LOG(("ZenUpdater: Background download validation failed: %1").arg(validationErr));
+			if (const auto ctrl = gWeakController.get()) {
+				ctrl->show(Ui::MakeInformBox(validationErr));
+			}
 			return;
 		}
 
-		outFile.write(reply->readAll());
-		outFile.close();
-
-		LOG(("ZenUpdater: Download finished successfully (%1 bytes). Applying update...").arg(outFile.size()));
+		LOG(("ZenUpdater: Download finished successfully (%1 bytes). Applying update...").arg(QFileInfo(targetPath).size()));
 		launchUpdaterAndExit(targetPath);
 	});
 }

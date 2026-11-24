@@ -148,6 +148,13 @@ bool HttpDownload(const std::wstring &url, std::string &outData) {
 		return false;
 	}
 
+	DWORD timeoutConnect = 15000;
+	DWORD timeoutRecv = 60000;
+	DWORD timeoutSend = 30000;
+	InternetSetOptionW(req, INTERNET_OPTION_CONNECT_TIMEOUT, &timeoutConnect, sizeof(timeoutConnect));
+	InternetSetOptionW(req, INTERNET_OPTION_RECEIVE_TIMEOUT, &timeoutRecv, sizeof(timeoutRecv));
+	InternetSetOptionW(req, INTERNET_OPTION_SEND_TIMEOUT, &timeoutSend, sizeof(timeoutSend));
+
 	DWORD statusCode = 0;
 	DWORD statusSize = sizeof(statusCode);
 	if (HttpQueryInfoW(
@@ -163,16 +170,28 @@ bool HttpDownload(const std::wstring &url, std::string &outData) {
 		}
 	}
 
+	DWORD expectedLen = 0;
+	DWORD lenSize = sizeof(expectedLen);
+	if (!HttpQueryInfoW(
+			req,
+			HTTP_QUERY_CONTENT_LENGTH | HTTP_QUERY_FLAG_NUMBER,
+			&expectedLen,
+			&lenSize,
+			nullptr)) {
+		expectedLen = 0;
+	}
+
 	std::vector<char> buf(65536);
 	DWORD bytesRead = 0;
-	while (InternetReadFile(req, buf.data(), static_cast<DWORD>(buf.size()), &bytesRead)
+	BOOL readOk = FALSE;
+	while ((readOk = InternetReadFile(req, buf.data(), static_cast<DWORD>(buf.size()), &bytesRead))
 			&& bytesRead > 0) {
 		outData.append(buf.data(), bytesRead);
 	}
 
 	InternetCloseHandle(req);
 	InternetCloseHandle(session);
-	return !outData.empty();
+	return readOk && !outData.empty() && (expectedLen == 0 || outData.size() >= expectedLen);
 }
 
 bool WriteAllBytes(const std::wstring &path, const std::string &data) {
@@ -343,6 +362,15 @@ int RunInteractiveCheck() {
 		MessageBoxW(
 			nullptr,
 			L"Не удалось скачать файл обновления.",
+			kDialogTitle,
+			MB_OK | MB_ICONERROR);
+		return 1;
+	}
+
+	if (payload.size() < 512 * 1024 || payload[0] != 'M' || payload[1] != 'Z') {
+		MessageBoxW(
+			nullptr,
+			L"Скачанный файл обновления повреждён или не является исполняемым файлом Windows.",
 			kDialogTitle,
 			MB_OK | MB_ICONERROR);
 		return 1;

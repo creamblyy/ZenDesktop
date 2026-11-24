@@ -11,9 +11,11 @@ This file is part of Telegram Desktop fork - ZenDesktop with RelayHooks.
 #include <QtCore/QCryptographicHash>
 #include <QtCore/QPointer>
 #include <QtCore/QRandomGenerator>
+#include <QtCore/QTimer>
 #include <QtCore/QtEndian>
 #include <QtNetwork/QHostAddress>
 #include <QtNetwork/QNetworkProxy>
+#include <QtNetwork/QSslError>
 #include <QtNetwork/QSslSocket>
 #include <QtNetwork/QTcpServer>
 #include <QtNetwork/QTcpSocket>
@@ -35,6 +37,9 @@ constexpr auto kProtoTagPos = 56;
 constexpr auto kDcIdxPos = 60;
 constexpr auto kMaxHandshakeDrain = 64 * 1024;
 constexpr auto kMaxUpgradeResp = 16 * 1024;
+constexpr auto kMaxClientPending = 4 * 1024 * 1024;
+constexpr auto kMaxUpstreamBuf = 16 * 1024 * 1024;
+constexpr auto kConnectTimeoutMs = 8000;
 constexpr auto kWsPort = 443;
 
 constexpr uint32_t kProtoAbridged = 0xEFEFEFEFU;
@@ -186,6 +191,10 @@ public:
 				parts.push_back((offset == 0) ? _cipherBuf : _cipherBuf.mid(offset));
 				offset = total;
 				_disabled = true;
+				_cipherBuf.clear();
+				_cipherBuf.squeeze();
+				_plainBuf.clear();
+				_plainBuf.squeeze();
 				break;
 			}
 			parts.push_back(_cipherBuf.mid(offset, pktLen));
@@ -253,9 +262,24 @@ public:
 		QObject *parent)
 	: QObject(parent)
 	, _client(client)
-	, _secret(secret) {
+	, _secret(secret)
+	, _connectTimer(this) {
 		_client->setParent(this);
 		_client->setSocketOption(QAbstractSocket::LowDelayOption, 1);
+
+		_connectTimer.setSingleShot(true);
+		connect(&_connectTimer, &QTimer::timeout, this, [this] {
+			if (_state == State::ConnectingUpstream || _state == State::WaitWsUpgrade) {
+				if (_domainIndex < int(_domains.size())) {
+					tryNextDomain();
+					return;
+				}
+			}
+			if (_state != State::Bridging && _state != State::Closed) {
+				closeSession();
+			}
+		});
+		_connectTimer.start(kConnectTimeoutMs);
 
 		connect(_client, &QTcpSocket::readyRead, this, [this] {
 			onClientReadyRead();
@@ -301,6 +325,10 @@ private:
 			return;
 		}
 		if (_state == State::ConnectingUpstream || _state == State::WaitWsUpgrade) {
+			if (_clientPending.size() + chunk.size() > kMaxClientPending) {
+				closeSession();
+				return;
+			}
 			_clientPending.append(chunk);
 			return;
 		}
@@ -421,11 +449,18 @@ private:
 
 		_state = State::ConnectingUpstream;
 		_upstreamBuf.clear();
+		_connectTimer.start(kConnectTimeoutMs);
 		const auto host = _domains[_domainIndex++];
 
 		_upstream = new QSslSocket(this);
 		_upstream->setProxy(QNetworkProxy::NoProxy);
 		_upstream->setSocketOption(QAbstractSocket::LowDelayOption, 1);
+
+		connect(_upstream, &QSslSocket::sslErrors, this, [this](const QList<QSslError> &errors) {
+			for (const auto &err : errors) {
+				LOG(("ZenWsProxy: SSL error: %1").arg(err.errorString()));
+			}
+		});
 
 		connect(_upstream, &QSslSocket::encrypted, this, [this, host] {
 			if (_state != State::ConnectingUpstream) {
@@ -477,6 +512,10 @@ private:
 			return;
 		}
 		_upstreamBuf.append(_upstream->readAll());
+		if (_upstreamBuf.size() > kMaxUpstreamBuf) {
+			closeSession();
+			return;
+		}
 
 		if (_state == State::WaitWsUpgrade) {
 			const int hdrEnd = _upstreamBuf.indexOf("\r\n\r\n");
@@ -504,6 +543,7 @@ private:
 			}
 
 			_state = State::Bridging;
+			_connectTimer.stop();
 			sendWsFrame(0x02, _relayInit);
 			if (!_clientPending.isEmpty()) {
 				const auto pending = _clientPending;
@@ -623,6 +663,7 @@ private:
 			return;
 		}
 		_state = State::Closed;
+		_connectTimer.stop();
 		if (_client) {
 			_client->disconnect(this);
 			_client->close();
@@ -636,6 +677,7 @@ private:
 
 	QTcpSocket *_client = nullptr;
 	QSslSocket *_upstream = nullptr;
+	QTimer _connectTimer;
 	QByteArray _secret;
 	QByteArray _clientPending;
 	QByteArray _upstreamBuf;

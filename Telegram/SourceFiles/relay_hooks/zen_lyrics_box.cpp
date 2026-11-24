@@ -31,6 +31,7 @@ This file is part of Telegram Desktop fork - ZenDesktop with RelayHooks.
 #include <QtGui/QPainter>
 #include <QtGui/QPainterPath>
 #include <QtGui/QMouseEvent>
+#include <chrono>
 #include <functional>
 #include <memory>
 
@@ -378,7 +379,9 @@ void ZenLyricsBox::fetchLyrics(const QString &title, const QString &performer) {
 	const auto initialQuery = (performer.trimmed() + " " + title.trimmed()).trimmed();
 
 	const auto runQuery = std::make_shared<std::function<void(const QString&)>>();
-	*runQuery = [this, runQuery, cleanedTitle, hasPerformer](const QString &query) {
+	lifetime().add([runQuery] {});
+	const auto weakRun = std::weak_ptr<std::function<void(const QString&)>>(runQuery);
+	*runQuery = [this, weakRun, cleanedTitle, hasPerformer](const QString &query) {
 		if (query.isEmpty()) {
 			showStatusMessage(QString::fromUtf8("Текст песни не найден в базе."));
 			return;
@@ -388,18 +391,21 @@ void ZenLyricsBox::fetchLyrics(const QString &title, const QString &performer) {
 
 		auto req = QNetworkRequest(url);
 		req.setAttribute(QNetworkRequest::Http2AllowedAttribute, false);
+		req.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::NoLessSafeRedirectPolicy);
+		req.setTransferTimeout(std::chrono::milliseconds(15000));
 		req.setHeader(QNetworkRequest::UserAgentHeader, "ZenDesktop/1.0.0");
 
 		const auto reply = _net.get(req);
 		_reply = reply;
-		connect(reply, &QNetworkReply::finished, this, [this, reply, runQuery, cleanedTitle, hasPerformer] {
+		connect(reply, &QNetworkReply::finished, this, [this, reply, weakRun, cleanedTitle, hasPerformer] {
 			reply->deleteLater();
 			if (_reply.data() != reply) {
 				return;
 			}
 			_reply = nullptr;
 
-			if (reply->error() != QNetworkReply::NoError) {
+			const auto status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+			if (reply->error() != QNetworkReply::NoError || status >= 400) {
 				showStatusMessage(QString::fromUtf8("Не удалось загрузить текст песни из сети.\nПроверьте подключение к интернету."));
 				return;
 			}
@@ -409,7 +415,9 @@ void ZenLyricsBox::fetchLyrics(const QString &title, const QString &performer) {
 			if (!doc.isArray() || doc.array().isEmpty()) {
 				if (!_triedTitleFallback && hasPerformer && !cleanedTitle.isEmpty()) {
 					_triedTitleFallback = true;
-					(*runQuery)(cleanedTitle);
+					if (const auto fn = weakRun.lock(); fn && *fn) {
+						(*fn)(cleanedTitle);
+					}
 					return;
 				}
 				showStatusMessage(QString::fromUtf8("Текст песни не найден в базе."));

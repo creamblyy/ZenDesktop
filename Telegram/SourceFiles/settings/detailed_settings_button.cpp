@@ -1,5 +1,6 @@
 #include "settings/detailed_settings_button.h"
 
+#include "relay_hooks/zen_m3_widgets.h"
 #include "ui/painter.h"
 #include "ui/ui_utility.h"
 #include "ui/wrap/vertical_layout.h"
@@ -19,7 +20,7 @@ DetailedSettingsButton::DetailedSettingsButton(
 , _toggle(toggled ? std::make_unique<Ui::ToggleView>(
 	_style.button.toggle,
 	false,
-	[this] { rtlupdate(toggleRect()); }) : nullptr)
+	[this] { rtlupdate(toggleRect().adjusted(-6, -6, 6, 6)); }) : nullptr)
 , _iconForeground(icon.icon)
 , _iconBackground(icon.background)
 , _iconBackgroundBrush(std::move(icon.backgroundBrush)) {
@@ -160,7 +161,14 @@ void DetailedSettingsButton::paintEvent(QPaintEvent *e) {
 
 	if (_toggle) {
 		const auto toggle = toggleRect();
-		_toggle->paint(p, toggle.left(), toggle.top(), width());
+		Relay::PaintZenM3Switch(
+			p,
+			QRectF(myrtlrect(toggle)),
+			_toggle->currentAnimationValue(),
+			isOver(),
+			isDown(),
+			isDisabled(),
+			_toggleLocked ? &_style.button.toggle.lockIcon : nullptr);
 	}
 }
 
@@ -208,7 +216,7 @@ int DetailedSettingsButton::firstDescriptionLineBottom() const {
 
 int DetailedSettingsButton::textAvailableWidth(int outerw) const {
 	const auto toggleWidth = _toggle
-		? _style.button.toggleSkip + _toggle->getSize().width()
+		? _style.button.toggleSkip + std::max(_toggle->getSize().width(), 42)
 		: 0;
 	return std::max(
 		1,
@@ -219,13 +227,14 @@ int DetailedSettingsButton::textAvailableWidth(int outerw) const {
 }
 
 QRect DetailedSettingsButton::toggleRect() const {
-	const auto toggle = _toggle->getSize();
+	const auto toggleW = 42;
+	const auto toggleH = 25;
 	const auto anchorBottom = firstDescriptionLineBottom();
 	return QRect(
-		width() - _style.button.toggleSkip - toggle.width(),
-		(anchorBottom - toggle.height()) / 2,
-		toggle.width(),
-		toggle.height());
+		width() - _style.button.toggleSkip - toggleW,
+		(anchorBottom - toggleH) / 2,
+		toggleW,
+		toggleH);
 }
 
 QRect DetailedSettingsButton::iconAreaRect() const {

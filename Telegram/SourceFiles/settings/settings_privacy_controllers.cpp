@@ -1717,6 +1717,8 @@ object_ptr<Ui::RpWidget> GiftsAutoSavePrivacyController::setupAboveWidget(
 	})));
 	Data::AmPremiumValue(session) | rpl::on_next([=](bool value) {
 		icon->setToggleLocked(!value);
+		icon->setProperty("zen_toggle_locked", !value);
+		icon->update();
 		if (!value) {
 			_state->disables.fire({});
 		}
@@ -1778,6 +1780,8 @@ object_ptr<Ui::RpWidget> GiftsAutoSavePrivacyController::setupBelowWidget(
 		})));
 		rpl::duplicate(premium) | rpl::on_next([=](bool value) {
 			button->setToggleLocked(!value);
+			button->setProperty("zen_toggle_locked", !value);
+			button->update();
 		}, button->lifetime());
 		button->toggledValue() | rpl::on_next([=](bool enable) {
 			if (enable) {

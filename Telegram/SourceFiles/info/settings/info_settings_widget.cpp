@@ -7,6 +7,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "info/settings/info_settings_widget.h"
 
+#include "relay_hooks/zen_m3_widgets.h"
 #include "info/info_memento.h"
 #include "settings/sections/settings_main.h"
 #include "settings/sections/settings_information.h"
@@ -157,6 +158,8 @@ Widget::Widget(
 			return e->type() == QEvent::Wheel;
 		}));
 	}
+
+	Relay::ApplyZenM3SettingsTheme(_inner.get());
 }
 
 Widget::~Widget() = default;

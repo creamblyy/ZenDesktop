@@ -4,6 +4,7 @@ This file is part of Telegram Desktop fork - ZenDesktop with RelayHooks.
 #include "relay_hooks/zen_quick_proxy.h"
 #include "relay_hooks/relay_hooks.h"
 #include "relay_hooks/zen_ws_proxy.h"
+#include "base/weak_ptr.h"
 #include "boxes/connection_box.h"
 #include "core/application.h"
 #include "core/core_settings.h"
@@ -14,17 +15,30 @@ This file is part of Telegram Desktop fork - ZenDesktop with RelayHooks.
 #include "styles/style_layers.h"
 #include "styles/style_menu_icons.h"
 
+#include <QtCore/QHash>
 #include <QtGui/QMouseEvent>
 #include <QtGui/QPainter>
 #include <QtNetwork/QTcpSocket>
+#include <memory>
 
 namespace Relay {
+namespace {
+
+QHash<const ZenQuickProxyWidget*, base::weak_ptr<Window::SessionController>> gWeakControllers;
+
+} // namespace
 
 ZenQuickProxyWidget::ZenQuickProxyWidget(
 		QWidget *parent,
 		Window::SessionController *controller)
 : Ui::RpWidget(parent)
 , _controller(controller) {
+	if (controller) {
+		gWeakControllers.insert(this, base::make_weak(controller));
+	}
+	lifetime().add([this] {
+		gWeakControllers.remove(this);
+	});
 	resize(32, 32);
 	setCursor(style::cur_pointer);
 	setMouseTracking(true);
@@ -89,7 +103,10 @@ void ZenQuickProxyWidget::measurePing() {
 	uint16 port = 0;
 	if (RelayHooks::Instance().isWsProxyEnabled()) {
 		host = "127.0.0.1";
-		port = 1080;
+		port = ZenWsProxy::Instance().port();
+		if (!port) {
+			port = 1443;
+		}
 	} else {
 		const auto selected = proxySettings.selected();
 		host = selected.host;
@@ -106,21 +123,38 @@ void ZenQuickProxyWidget::measurePing() {
 	auto *timeout = new QTimer(sock);
 	timeout->setSingleShot(true);
 	timeout->start(3000);
+	const auto finished = std::make_shared<bool>(false);
 
-	connect(sock, &QTcpSocket::connected, this, [this, sock, timeout] {
+	connect(sock, &QTcpSocket::connected, this, [this, sock, timeout, finished] {
+		if (*finished) {
+			return;
+		}
+		*finished = true;
+		sock->disconnect(this);
 		timeout->stop();
 		_pingMs = std::max(1, int(_pingClock.elapsed()));
 		sock->abort();
 		sock->deleteLater();
 		updateState();
 	});
-	connect(sock, &QTcpSocket::errorOccurred, this, [this, sock, timeout](QAbstractSocket::SocketError) {
+	connect(sock, &QTcpSocket::errorOccurred, this, [this, sock, timeout, finished](QAbstractSocket::SocketError) {
+		if (*finished) {
+			return;
+		}
+		*finished = true;
+		sock->disconnect(this);
 		timeout->stop();
 		_pingMs = -1;
+		sock->abort();
 		sock->deleteLater();
 		updateState();
 	});
-	connect(timeout, &QTimer::timeout, this, [this, sock] {
+	connect(timeout, &QTimer::timeout, this, [this, sock, finished] {
+		if (*finished) {
+			return;
+		}
+		*finished = true;
+		sock->disconnect(this);
 		_pingMs = -1;
 		sock->abort();
 		sock->deleteLater();
@@ -163,13 +197,17 @@ void ZenQuickProxyWidget::paintEvent(QPaintEvent *e) {
 }
 
 void ZenQuickProxyWidget::toggleProxyQuick() {
+	if (RelayHooks::Instance().isWsProxyEnabled()) {
+		RelayHooks::Instance().setWsProxyEnabled(false);
+		ZenWsProxy::Instance().applyEnabled(false);
+		Core::App().saveSettingsDelayed();
+		measurePing();
+		updateState();
+		return;
+	}
 	auto &proxy = Core::App().settings().proxy();
 	if (proxy.settings() == MTP::ProxyData::Settings::Enabled) {
 		Core::App().setCurrentProxy(proxy.selected(), MTP::ProxyData::Settings::Disabled);
-		if (RelayHooks::Instance().isWsProxyEnabled()) {
-			RelayHooks::Instance().setWsProxyEnabled(false);
-			ZenWsProxy::Instance().stop();
-		}
 	} else {
 		if (!proxy.selected().host.isEmpty()) {
 			Core::App().setCurrentProxy(proxy.selected(), MTP::ProxyData::Settings::Enabled);
@@ -182,7 +220,7 @@ void ZenQuickProxyWidget::toggleProxyQuick() {
 	}
 	Core::App().saveSettingsDelayed();
 	measurePing();
-	update();
+	updateState();
 }
 
 void ZenQuickProxyWidget::showMenu() {
@@ -231,11 +269,8 @@ void ZenQuickProxyWidget::showMenu() {
 		[this, wsOn] {
 			const auto next = !wsOn;
 			RelayHooks::Instance().setWsProxyEnabled(next);
-			if (next) {
-				ZenWsProxy::Instance().start();
-			} else {
-				ZenWsProxy::Instance().stop();
-			}
+			ZenWsProxy::Instance().applyEnabled(next);
+			Core::App().saveSettingsDelayed();
 			measurePing();
 			updateState();
 		});
@@ -245,17 +280,20 @@ void ZenQuickProxyWidget::showMenu() {
 		Core::App().setCurrentProxy(p.selected(), MTP::ProxyData::Settings::Disabled);
 		if (RelayHooks::Instance().isWsProxyEnabled()) {
 			RelayHooks::Instance().setWsProxyEnabled(false);
-			ZenWsProxy::Instance().stop();
+			ZenWsProxy::Instance().applyEnabled(false);
 		}
 		Core::App().saveSettingsDelayed();
 		measurePing();
 		updateState();
 	});
 
-	if (_controller) {
+	const auto weakCtrl = gWeakControllers.value(this);
+	if (weakCtrl.get()) {
 		_menu->addSeparator();
-		_menu->addAction(QString::fromUtf8("Настройки прокси..."), [ctrl = _controller] {
-			ProxiesBoxController::Show(ctrl);
+		_menu->addAction(QString::fromUtf8("Настройки прокси..."), [weakCtrl] {
+			if (const auto ctrl = weakCtrl.get()) {
+				ProxiesBoxController::Show(ctrl);
+			}
 		});
 	}
 

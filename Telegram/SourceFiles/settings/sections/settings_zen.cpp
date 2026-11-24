@@ -59,7 +59,9 @@ This file is part of Telegram Desktop fork - ZenDesktop with RelayHooks.
 #include <QtSvg/QSvgRenderer>
 #include <QGraphicsOpacityEffect>
 #include <algorithm>
+#include <chrono>
 #include <cmath>
+#include <memory>
 
 namespace Settings {
 namespace {
@@ -79,10 +81,9 @@ not_null<Ui::SettingsButton*> AddToggle(
 	return btn;
 }
 
-// Inset divider (M3 style: clean 3px gap between islands, or 1px line when M3 off)
+// Inset divider (M3 style: handled by unified M3 islands, or 1px line when M3 off)
 void AddInsetDivider(not_null<Ui::VerticalLayout*> content, int leftMargin = st::settingsButton.padding.left()) {
 	if (Relay::RelayHooks::Instance().isMaterial3BubblesEnabled()) {
-		content->add(object_ptr<Ui::FixedHeightWidget>(content, 3));
 		return;
 	}
 	const auto divider = content->add(
@@ -163,85 +164,9 @@ void FinishZenReveal(ZenTransitionState *state) {
 	}
 }
 
-void ApplyM3ZenSectionIslands(not_null<Ui::VerticalLayout*> content) {
-	if (!Relay::RelayHooks::Instance().isMaterial3BubblesEnabled()) {
-		return;
-	}
-	std::vector<std::vector<Ui::SettingsButton*>> groups;
-	std::vector<Ui::SettingsButton*> current;
-	const auto flush = [&] {
-		if (!current.empty()) {
-			groups.push_back(std::move(current));
-			current.clear();
-		}
-	};
-	for (auto *child : content->children()) {
-		if (auto *btn = dynamic_cast<Ui::SettingsButton*>(child)) {
-			current.push_back(btn);
-		} else if (auto *fix = dynamic_cast<Ui::FixedHeightWidget*>(child)) {
-			if (fix->height() <= 4) {
-				continue;
-			}
-			flush();
-		} else if (child->isWidgetType()) {
-			flush();
-		}
-	}
-	flush();
-
-	for (const auto &group : groups) {
-		const auto count = int(group.size());
-		for (int i = 0; i < count; ++i) {
-			auto *btn = group[i];
-			const auto isFirst = (i == 0);
-			const auto isLast = (i + 1 == count);
-			btn->paintRequest() | rpl::on_next([=] {
-				auto p = QPainter(btn);
-				p.setRenderHint(QPainter::Antialiasing);
-				constexpr auto kMarginX = 12.0;
-				constexpr auto kOuterR = 16.0;
-				constexpr auto kInnerR = 6.0;
-				const auto w = double(btn->width());
-				const auto h = double(btn->height());
-				if (w <= 2.0 * kMarginX || h <= 4.0) {
-					return;
-				}
-				const auto x1 = kMarginX;
-				const auto x2 = w - kMarginX;
-				const auto y1 = isFirst ? 1.0 : 2.5;
-				const auto y2 = isLast ? (h - 1.0) : (h - 2.5);
-				const auto rt = isFirst ? kOuterR : kInnerR;
-				const auto rb = isLast ? kOuterR : kInnerR;
-
-				QPainterPath cardPath;
-				cardPath.moveTo(x1 + rt, y1);
-				cardPath.lineTo(x2 - rt, y1);
-				cardPath.arcTo(QRectF(x2 - 2.0 * rt, y1, 2.0 * rt, 2.0 * rt), 90.0, -90.0);
-				cardPath.lineTo(x2, y2 - rb);
-				cardPath.arcTo(QRectF(x2 - 2.0 * rb, y2 - 2.0 * rb, 2.0 * rb, 2.0 * rb), 0.0, -90.0);
-				cardPath.lineTo(x1 + rb, y2);
-				cardPath.arcTo(QRectF(x1, y2 - 2.0 * rb, 2.0 * rb, 2.0 * rb), 270.0, -90.0);
-				cardPath.lineTo(x1, y1 + rt);
-				cardPath.arcTo(QRectF(x1, y1, 2.0 * rt, 2.0 * rt), 180.0, -90.0);
-				cardPath.closeSubpath();
-
-				QPainterPath full;
-				full.addRect(QRectF(0.0, 0.0, w, h));
-				const auto maskPath = full.subtracted(cardPath);
-
-				auto tint = st::windowFg->c;
-				tint.setAlphaF(0.06);
-				p.fillPath(cardPath, tint);
-				p.fillPath(maskPath, st::windowBg->c);
-			}, btn->lifetime());
-		}
-	}
-}
-
 void AttachZenSectionTransition(
 		not_null<AbstractSection*> section,
 		not_null<Ui::VerticalLayout*> content) {
-	ApplyM3ZenSectionIslands(content);
 	const auto state = content->lifetime().make_state<ZenTransitionState>();
 	state->content = content.get();
 
@@ -991,27 +916,84 @@ void ZenTranslate::setupContent() {
 					rpl::single(QString::fromUtf8("Скачать модель ggml-tiny.bin (~75 МБ)")),
 					st::settingsButtonNoIcon),
 				QMargins(0, 4, 0, 8));
+			const auto downloading = std::make_shared<bool>(false);
+			const auto completed = std::make_shared<bool>(false);
+			const auto activeReply = std::make_shared<QPointer<QNetworkReply>>();
+			const auto activeFile = std::make_shared<std::shared_ptr<QFile>>();
+			const auto dest = QDir(Relay::ZenTranscriber::WhisperDir()).filePath("ggml-tiny.bin");
+			const auto partPath = dest + ".part";
+			auto *net = new QNetworkAccessManager(box);
+
+			box->lifetime().add([activeReply, activeFile, completed, partPath] {
+				if (!*completed) {
+					if (*activeReply) {
+						(*activeReply)->abort();
+					}
+					if (*activeFile && (*activeFile)->isOpen()) {
+						(*activeFile)->close();
+					}
+					QFile::remove(partPath);
+				}
+			});
+
 			dlBtn->setClickedCallback([=] {
+				if (*downloading) {
+					return;
+				}
 				QDir().mkpath(Relay::ZenTranscriber::WhisperDir());
-				const auto dest = QDir(Relay::ZenTranscriber::WhisperDir()).filePath("ggml-tiny.bin");
+				auto outFile = std::make_shared<QFile>(partPath);
+				if (!outFile->open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+					infoLabel->setText(QString::fromUtf8("Не удалось создать временный файл модели."));
+					return;
+				}
+				*downloading = true;
+				*completed = false;
+				*activeFile = outFile;
+				dlBtn->setDisabled(true);
+				const auto writeOk = std::make_shared<bool>(true);
+
 				infoLabel->setText(QString::fromUtf8("Загрузка ggml-tiny.bin с HuggingFace..."));
-				auto *net = new QNetworkAccessManager(box);
-				auto *reply = net->get(QNetworkRequest(QUrl(
-					"https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.bin")));
+				QNetworkRequest req(QUrl(
+					"https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.bin"));
+				req.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::NoLessSafeRedirectPolicy);
+				req.setTransferTimeout(std::chrono::milliseconds(60000));
+				auto *reply = net->get(req);
+				*activeReply = reply;
+
+				QObject::connect(reply, &QNetworkReply::readyRead, box, [reply, outFile, writeOk] {
+					const auto chunk = reply->readAll();
+					if (!chunk.isEmpty() && outFile->isOpen()) {
+						if (outFile->write(chunk) != chunk.size()) {
+							*writeOk = false;
+						}
+					}
+				});
 				QObject::connect(reply, &QNetworkReply::finished, box, [=] {
+					*downloading = false;
 					reply->deleteLater();
-					if (reply->error() != QNetworkReply::NoError) {
-						infoLabel->setText(QString::fromUtf8("Ошибка загрузки: %1").arg(reply->errorString()));
+					if (outFile->isOpen()) {
+						const auto tail = reply->readAll();
+						if (!tail.isEmpty() && outFile->write(tail) != tail.size()) {
+							*writeOk = false;
+						}
+						outFile->close();
+					}
+					const auto status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+					if (reply->error() != QNetworkReply::NoError || status < 200 || status >= 300 || !*writeOk) {
+						QFile::remove(partPath);
+						dlBtn->setDisabled(false);
+						infoLabel->setText(QString::fromUtf8("Ошибка загрузки (HTTP %1): %2").arg(status).arg(reply->errorString()));
 						return;
 					}
-					QFile f(dest);
-					if (f.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
-						f.write(reply->readAll());
-						f.close();
-						infoLabel->setText(QString::fromUtf8("Модель сохранена: %1").arg(dest));
-					} else {
-						infoLabel->setText(QString::fromUtf8("Не удалось записать файл модели."));
+					QFile::remove(dest);
+					if (!QFile::rename(partPath, dest)) {
+						QFile::remove(partPath);
+						dlBtn->setDisabled(false);
+						infoLabel->setText(QString::fromUtf8("Не удалось сохранить файл модели."));
+						return;
 					}
+					*completed = true;
+					infoLabel->setText(QString::fromUtf8("Модель сохранена: %1").arg(dest));
 				});
 			});
 

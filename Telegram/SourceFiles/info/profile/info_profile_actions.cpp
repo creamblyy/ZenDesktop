@@ -90,6 +90,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "ui/effects/toggle_arrow.h"
 #include "ui/image/image.h"
 #include "ui/painter.h"
+#include "ui/basic_click_handlers.h"
 #include "ui/rect.h"
 #include "ui/ui_utility.h"
 #include "ui/text/format_values.h"
@@ -128,6 +129,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include <QtGui/QPainterPath>
 #include <algorithm>
 #include <array>
+#include <cmath>
 
 namespace Info {
 namespace Profile {
@@ -135,6 +137,97 @@ namespace {
 
 constexpr auto kDay = Data::WorkingInterval::kDay;
 constexpr auto kPeerIdLinkIndex = uint16(1);
+
+[[nodiscard]] QString EstimateRegistrationDate(uint64 bareUserId) {
+	struct IdAnchor {
+		uint64 id = 0;
+		int year = 0;
+		int month = 0;
+	};
+	static constexpr IdAnchor kAnchors[] = {
+		{ 1000000ULL, 2013, 8 },
+		{ 2768409ULL, 2013, 11 },
+		{ 7679610ULL, 2014, 1 },
+		{ 11538514ULL, 2014, 2 },
+		{ 15835244ULL, 2014, 3 },
+		{ 23646077ULL, 2014, 4 },
+		{ 38015510ULL, 2014, 5 },
+		{ 44653558ULL, 2014, 6 },
+		{ 54704224ULL, 2014, 8 },
+		{ 62666920ULL, 2014, 10 },
+		{ 72816430ULL, 2014, 12 },
+		{ 88766400ULL, 2015, 2 },
+		{ 103151531ULL, 2015, 5 },
+		{ 133912606ULL, 2015, 8 },
+		{ 169686800ULL, 2015, 11 },
+		{ 194650000ULL, 2016, 2 },
+		{ 228000000ULL, 2016, 5 },
+		{ 260000000ULL, 2016, 8 },
+		{ 300000000ULL, 2016, 12 },
+		{ 350000000ULL, 2017, 4 },
+		{ 410000000ULL, 2017, 8 },
+		{ 480000000ULL, 2017, 12 },
+		{ 550000000ULL, 2018, 4 },
+		{ 620000000ULL, 2018, 8 },
+		{ 710000000ULL, 2018, 12 },
+		{ 800000000ULL, 2019, 4 },
+		{ 900000000ULL, 2019, 8 },
+		{ 1020000000ULL, 2019, 12 },
+		{ 1180000000ULL, 2020, 4 },
+		{ 1350000000ULL, 2020, 9 },
+		{ 1550000000ULL, 2021, 1 },
+		{ 1780000000ULL, 2021, 5 },
+		{ 2050000000ULL, 2021, 10 },
+		{ 5000000000ULL, 2021, 11 },
+		{ 5250000000ULL, 2022, 3 },
+		{ 5550000000ULL, 2022, 7 },
+		{ 5850000000ULL, 2022, 11 },
+		{ 6150000000ULL, 2023, 3 },
+		{ 6450000000ULL, 2023, 7 },
+		{ 6750000000ULL, 2023, 11 },
+		{ 7050000000ULL, 2024, 3 },
+		{ 7350000000ULL, 2024, 7 },
+		{ 7650000000ULL, 2024, 11 },
+		{ 7950000000ULL, 2025, 3 },
+		{ 8250000000ULL, 2025, 7 },
+		{ 8550000000ULL, 2025, 11 },
+		{ 8850000000ULL, 2026, 3 },
+		{ 9150000000ULL, 2026, 7 },
+		{ 9450000000ULL, 2026, 11 },
+	};
+	constexpr auto kCount = sizeof(kAnchors) / sizeof(kAnchors[0]);
+	if (bareUserId < kAnchors[0].id) {
+		return QString::fromUtf8("раньше августа 2013");
+	}
+	if (bareUserId > kAnchors[kCount - 1].id) {
+		return QString::fromUtf8("после ноября 2026");
+	}
+	auto loIdx = size_t(0);
+	for (size_t i = 0; i + 1 < kCount; ++i) {
+		if (bareUserId <= kAnchors[i + 1].id) {
+			loIdx = i;
+			break;
+		}
+	}
+	const auto &a = kAnchors[loIdx];
+	const auto &b = kAnchors[loIdx + 1];
+	const auto mA = a.year * 12 + (a.month - 1);
+	const auto mB = b.year * 12 + (b.month - 1);
+	const auto ratio = (b.id > a.id)
+		? double(bareUserId - a.id) / double(b.id - a.id)
+		: 0.0;
+	const auto estTotal = mA + int(std::round(ratio * double(mB - mA)));
+	const auto estYear = estTotal / 12;
+	const auto estMonth = estTotal % 12;
+	static const char *kMonths[] = {
+		"январь", "февраль", "март", "апрель",
+		"май", "июнь", "июль", "август",
+		"сентябрь", "октябрь", "ноябрь", "декабрь",
+	};
+	return QString::fromUtf8("~%1 %2")
+		.arg(QString::fromUtf8(kMonths[std::clamp(estMonth, 0, 11)]))
+		.arg(estYear);
+}
 
 [[nodiscard]] std::pair<QColor, QColor> ExtractDominantCardColors(
 		const QImage &img) {
@@ -2024,10 +2117,26 @@ BlockPart DetailsFiller::makeInfo() {
 			? peerToChat(_peer->id).bare
 			: _peer->id.value;
 		const auto idStr = QString::number(bareId);
-		addInfoOneLine(
+		const auto idLine = addInfoOneLine(
 			v::text::data(QString::fromUtf8("ID профиля")),
-			rpl::single(TextWithEntities{ idStr }),
-			idStr);
+			rpl::single(Ui::Text::Link(idStr, 1)),
+			QString::fromUtf8("Копировать ID"));
+		idLine.text->setLink(
+			1,
+			std::make_shared<LambdaClickHandler>([=] {
+				TextUtilities::SetClipboardText({ idStr });
+				if (const auto strong = weak.get()) {
+					strong->showToast(
+						QString::fromUtf8("ID скопирован: %1").arg(idStr));
+				}
+			}));
+		if (_peer->asUser() && bareId > 0) {
+			const auto regDate = EstimateRegistrationDate(bareId);
+			addInfoOneLine(
+				v::text::data(QString::fromUtf8("Примерная дата регистрации")),
+				rpl::single(TextWithEntities{ regDate }),
+				QString::fromUtf8("Копировать дату"));
+		}
 	}
 	result->paintRequest() | rpl::on_next([=] {
 		std::vector<QWidget*> rows;
@@ -3684,98 +3793,12 @@ void ActionsFiller::fillChannelActions(
 	}
 }
 
-void ApplyM3ProfileButtons(not_null<QWidget*> container) {
-	if (!Relay::RelayHooks::Instance().isMaterial3BubblesEnabled()) {
-		return;
-	}
-	const auto buttons = std::make_shared<std::vector<QPointer<Ui::SettingsButton>>>();
-	for (auto *child : container->findChildren<QWidget*>()) {
-		if (auto *btn = dynamic_cast<Ui::SettingsButton*>(child)) {
-			buttons->push_back(btn);
-		}
-	}
-	if (buttons->empty()) {
-		return;
-	}
-	for (const auto &btnPtr : *buttons) {
-		auto *btn = btnPtr.data();
-		if (!btn) {
-			continue;
-		}
-		btn->paintRequest() | rpl::on_next([=] {
-			std::vector<QWidget*> visible;
-			visible.reserve(buttons->size());
-			for (const auto &other : *buttons) {
-				if (other && other->isVisible() && other->height() > 0) {
-					visible.push_back(other.data());
-				}
-			}
-			if (visible.empty()) {
-				return;
-			}
-			std::sort(visible.begin(), visible.end(), [&](const QWidget *a, const QWidget *b) {
-				return a->mapTo(container.get(), QPoint(0, 0)).y()
-					< b->mapTo(container.get(), QPoint(0, 0)).y();
-			});
-			const auto it = std::find(visible.begin(), visible.end(), btn);
-			if (it == visible.end()) {
-				return;
-			}
-			const auto isFirst = (it == visible.begin());
-			const auto isLast = (std::next(it) == visible.end());
-
-			auto p = QPainter(btn);
-			p.setRenderHint(QPainter::Antialiasing);
-			constexpr auto kMarginX = 12.0;
-			constexpr auto kOuterR = 16.0;
-			constexpr auto kInnerR = 6.0;
-			const auto w = double(btn->width());
-			const auto h = double(btn->height());
-			if (w <= 2.0 * kMarginX || h <= 4.0) {
-				return;
-			}
-			const auto x1 = kMarginX;
-			const auto x2 = w - kMarginX;
-			const auto y1 = isFirst ? 1.0 : 2.5;
-			const auto y2 = isLast ? (h - 1.0) : (h - 2.5);
-			const auto rt = isFirst ? kOuterR : kInnerR;
-			const auto rb = isLast ? kOuterR : kInnerR;
-
-			QPainterPath cardPath;
-			cardPath.moveTo(x1 + rt, y1);
-			cardPath.lineTo(x2 - rt, y1);
-			cardPath.arcTo(QRectF(x2 - 2.0 * rt, y1, 2.0 * rt, 2.0 * rt), 90.0, -90.0);
-			cardPath.lineTo(x2, y2 - rb);
-			cardPath.arcTo(QRectF(x2 - 2.0 * rb, y2 - 2.0 * rb, 2.0 * rb, 2.0 * rb), 0.0, -90.0);
-			cardPath.lineTo(x1 + rb, y2);
-			cardPath.arcTo(QRectF(x1, y2 - 2.0 * rb, 2.0 * rb, 2.0 * rb), 270.0, -90.0);
-			cardPath.lineTo(x1, y1 + rt);
-			cardPath.arcTo(QRectF(x1, y1, 2.0 * rt, 2.0 * rt), 180.0, -90.0);
-			cardPath.closeSubpath();
-
-			QPainterPath full;
-			full.addRect(QRectF(0.0, 0.0, w, h));
-			const auto maskPath = full.subtracted(cardPath);
-
-			auto tint = st::windowFg->c;
-			tint.setAlphaF(0.06);
-			p.fillPath(maskPath, st::windowBg->c);
-			p.fillPath(cardPath, tint);
-		}, btn->lifetime());
-	}
-}
-
 void ActionsFiller::fill() {
 	if (const auto user = _peer->asUser()) {
 		fillUserActions(user);
 	} else if (const auto channel = _peer->asChannel()) {
 		if (!channel->isMegagroup()) {
 			fillChannelActions(channel);
-		}
-	}
-	for (auto *child : _blocks.layout()->children()) {
-		if (auto *v = dynamic_cast<Ui::VerticalLayout*>(child)) {
-			ApplyM3ProfileButtons(v);
 		}
 	}
 }
@@ -4008,7 +4031,6 @@ object_ptr<Ui::RpWidget> SetupChannelMembersAndManage(
 			std::move(adminsShown)
 		) | rpl::map(rpl::mappers::_1 || rpl::mappers::_2));
 
-	ApplyM3ProfileButtons(result->entity());
 	result->entity()->add(CreateSkipWidget(result));
 
 	return result;

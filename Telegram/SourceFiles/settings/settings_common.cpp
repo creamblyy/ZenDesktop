@@ -7,6 +7,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "settings/settings_common.h"
 
+#include "relay_hooks/relay_hooks.h"
+#include "relay_hooks/zen_m3_widgets.h"
 #include "base/timer.h"
 #include "lottie/lottie_icon.h"
 #include "menu/menu_send_details.h"
@@ -33,6 +35,9 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "styles/style_widgets.h"
 
 #include <QAction>
+#include <QtCore/QEvent>
+#include <QtCore/QPointer>
+#include <QtGui/QPainterPath>
 
 namespace Settings {
 namespace {
@@ -566,6 +571,7 @@ SeparatedToggle AddSeparatedToggle(
 		bool checked) {
 	const auto container = button->parentWidget();
 	const auto toggle = Ui::CreateChild<Button>(container, nullptr, st);
+	toggle->setProperty("zen_m3_skip_row", true);
 	const auto checkView = button->lifetime().make_state<Ui::ToggleView>(
 		st.toggle,
 		checked,
@@ -575,8 +581,18 @@ SeparatedToggle AddSeparatedToggle(
 	separator->paintRequest(
 	) | rpl::on_next([=, bg = st.textBgOver] {
 		auto p = QPainter(separator);
-		p.fillRect(separator->rect(), bg);
+		if (Relay::RelayHooks::Instance().isMaterial3BubblesEnabled()) {
+			auto c = st::windowFg->c;
+			c.setAlphaF(0.10);
+			p.fillRect(separator->rect(), c);
+		} else {
+			p.fillRect(separator->rect(), bg);
+		}
 	}, separator->lifetime());
+
+	const auto toggleCardOverlay = Ui::CreateChild<Ui::RpWidget>(toggle);
+	toggleCardOverlay->setAttribute(Qt::WA_TransparentForMouseEvents);
+
 	const auto separatorHeight = 2 * st.toggle.border + st.toggle.diameter;
 	button->geometryValue(
 	) | rpl::on_next([=](const QRect &r) {
@@ -593,22 +609,123 @@ SeparatedToggle AddSeparatedToggle(
 			separatorHeight);
 	}, toggle->lifetime());
 
+	const auto buttonPtr = QPointer<Button>(button.get());
+	button->events(
+	) | rpl::on_next([=](not_null<QEvent*> e) {
+		if (e->type() == QEvent::DynamicPropertyChange) {
+			toggleCardOverlay->update();
+		}
+	}, toggleCardOverlay->lifetime());
+	toggle->sizeValue(
+	) | rpl::on_next([=](const QSize &sz) {
+		toggleCardOverlay->setGeometry(0, 0, sz.width(), sz.height());
+	}, toggleCardOverlay->lifetime());
+	toggleCardOverlay->paintRequest(
+	) | rpl::on_next([=] {
+		if (!buttonPtr) {
+			return;
+		}
+		auto p = QPainter(toggleCardOverlay);
+		p.setRenderHint(QPainter::Antialiasing, true);
+		const auto isFirst = buttonPtr->property("zen_m3_is_first").isValid()
+			? buttonPtr->property("zen_m3_is_first").toBool()
+			: false;
+		const auto isLast = buttonPtr->property("zen_m3_is_last").isValid()
+			? buttonPtr->property("zen_m3_is_last").toBool()
+			: false;
+		const auto nextGapZero = buttonPtr->property("zen_m3_next_gap_zero").isValid()
+			? buttonPtr->property("zen_m3_next_gap_zero").toBool()
+			: false;
+
+		if (Relay::RelayHooks::Instance().isMaterial3BubblesEnabled()) {
+			constexpr auto kMarginX = 12.0;
+			constexpr auto kOuterR = 16.0;
+			constexpr auto kInnerR = 6.0;
+			const auto w = double(toggle->width());
+			const auto h = double(toggle->height());
+			if (w <= kMarginX + 4.0 || h <= 4.0) {
+				return;
+			}
+			const auto x1 = 0.0;
+			const auto x2 = w - kMarginX;
+			const auto y1 = isFirst ? 1.0 : 2.5;
+			const auto y2 = isLast ? (h - 1.0) : (h - 2.5);
+			const auto rt = isFirst ? kOuterR : kInnerR;
+			const auto rb = isLast ? kOuterR : kInnerR;
+
+			QPainterPath cardPath;
+			cardPath.moveTo(x1, y1);
+			cardPath.lineTo(x2 - rt, y1);
+			cardPath.arcTo(QRectF(x2 - 2.0 * rt, y1, 2.0 * rt, 2.0 * rt), 90.0, -90.0);
+			cardPath.lineTo(x2, y2 - rb);
+			cardPath.arcTo(QRectF(x2 - 2.0 * rb, y2 - 2.0 * rb, 2.0 * rb, 2.0 * rb), 0.0, -90.0);
+			cardPath.lineTo(x1, y2);
+			cardPath.closeSubpath();
+
+			QPainterPath full;
+			full.addRect(QRectF(0.0, 0.0, w, h));
+			const auto maskPath = full.subtracted(cardPath);
+
+			const auto isOver = (toggle->isOver() || toggle->isDown())
+				&& !toggle->isDisabled();
+			const auto isDark = (st::windowBg->c.lightnessF() < 0.5);
+			auto tint = st::windowFg->c;
+			tint.setAlphaF(isOver ? 0.02 : (isDark ? 0.055 : 0.042));
+
+			p.fillPath(maskPath, st::windowBg->c);
+			p.fillPath(cardPath, tint);
+		} else if (!isLast && nextGapZero) {
+			auto lineColor = st::windowFg->c;
+			lineColor.setAlphaF(0.08);
+			const auto w = std::max(0, toggle->width() - 20);
+			if (w > 0 && toggle->height() > 0) {
+				p.fillRect(0, toggle->height() - 1, w, 1, lineColor);
+			}
+		}
+	}, toggleCardOverlay->lifetime());
+
 	const auto checkWidget = Ui::CreateChild<Ui::RpWidget>(toggle);
-	checkWidget->resize(checkView->getSize());
+	checkWidget->setAttribute(Qt::WA_TransparentForMouseEvents);
+	checkWidget->resize(50, 32);
 	checkWidget->paintRequest(
 	) | rpl::on_next([=] {
 		auto p = QPainter(checkWidget);
-		checkView->paint(p, 0, 0, checkWidget->width());
+		Relay::PaintZenM3Switch(
+			p,
+			QRectF(4.0, 3.5, 42.0, 25.0),
+			checkView->currentAnimationValue(),
+			toggle->isOver(),
+			toggle->isDown(),
+			toggle->isDisabled(),
+			nullptr);
 	}, checkWidget->lifetime());
 	toggle->sizeValue(
 	) | rpl::on_next([=, &st](const QSize &s) {
 		checkWidget->moveToRight(
-			st.toggleSkip,
+			std::max(0, st.toggleSkip - 4),
 			(s.height() - checkWidget->height()) / 2);
 	}, toggle->lifetime());
+	toggle->events(
+	) | rpl::on_next([=](not_null<QEvent*> e) {
+		switch (e->type()) {
+		case QEvent::Enter:
+		case QEvent::Leave:
+		case QEvent::MouseButtonPress:
+		case QEvent::MouseButtonRelease:
+		case QEvent::EnabledChange:
+			checkWidget->update();
+			toggleCardOverlay->update();
+			break;
+		default:
+			break;
+		}
+	}, checkWidget->lifetime());
 
 	separator->show();
+	toggleCardOverlay->show();
+	toggleCardOverlay->raise();
 	checkWidget->show();
+	checkWidget->raise();
 	toggle->show();
 
 	return { toggle, checkView };

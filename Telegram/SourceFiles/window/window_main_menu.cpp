@@ -34,6 +34,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "info/stories/info_stories_widget.h"
 #include "lang/lang_keys.h"
 #include "relay_hooks/relay_hooks.h"
+#include "relay_hooks/zen_m3_widgets.h"
 #include "main/main_account.h"
 #include "main/main_app_config.h"
 #include "main/main_domain.h"
@@ -937,12 +938,14 @@ void MainMenu::setupMenu() {
 		)->setClickedCallback([=] {
 			controller->showAddContact();
 		});
-		addAction(
+		const auto fixOrder = addAction(
 			rpl::single(u"Fix chats order"_q),
 			{ &st::menuIconPin }
 		)->toggleOn(rpl::single(
 			_controller->session().settings().supportFixChatsOrder()
-		))->toggledChanges(
+		));
+		Relay::AttachZenM3Switch(fixOrder);
+		fixOrder->toggledChanges(
 		) | rpl::on_next([=](bool fix) {
 			_controller->session().settings().setSupportFixChatsOrder(fix);
 			_controller->session().saveSettings();
@@ -970,6 +973,7 @@ void MainMenu::setupMenu() {
 	)->toggleOn(_nightThemeSwitches.events_starting_with(
 		Window::Theme::IsNightMode()
 	));
+	Relay::AttachZenM3Switch(_nightThemeToggle);
 	_nightThemeToggle->toggledChanges(
 	) | rpl::filter([=](bool night) {
 		return (night != Window::Theme::IsNightMode());

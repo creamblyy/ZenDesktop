@@ -3,6 +3,7 @@ This file is part of Telegram Desktop fork - ZenDesktop with RelayHooks.
 */
 #include "relay_hooks/zen_badges.h"
 #include "relay_hooks/zen_badges_data.h"
+#include "base/weak_ptr.h"
 #include "logs.h"
 #include "window/window_session_controller.h"
 #include "ui/boxes/confirm_box.h"
@@ -25,10 +26,13 @@ This file is part of Telegram Desktop fork - ZenDesktop with RelayHooks.
 #include <QtNetwork/QNetworkAccessManager>
 #include <QtNetwork/QNetworkReply>
 #include <QtNetwork/QNetworkRequest>
+#include <chrono>
 #include <cmath>
 
 namespace Relay {
 namespace {
+
+bool gSyncing = false;
 
 constexpr auto kBadgeWidth = 16;
 constexpr auto kBadgeHeight = 16;
@@ -234,22 +238,33 @@ QString ZenBadges::exportToJson() const {
 }
 
 void ZenBadges::syncFromRemote(Window::SessionController *controller) {
+	if (gSyncing) {
+		return;
+	}
+	gSyncing = true;
+	const auto weakCtrl = controller
+		? base::make_weak(controller)
+		: base::weak_ptr<Window::SessionController>();
 	const auto net = new QNetworkAccessManager();
 	auto req = QNetworkRequest(QUrl(QString(
 		"https://raw.githubusercontent.com/creamblyy/ZenDesktop/dev/Telegram/SourceFiles/relay_hooks/zen_badges.json")));
 	req.setAttribute(QNetworkRequest::Http2AllowedAttribute, false);
+	req.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::NoLessSafeRedirectPolicy);
+	req.setTransferTimeout(std::chrono::milliseconds(15000));
 	req.setHeader(QNetworkRequest::UserAgentHeader, "ZenDesktop/1.0.0");
 
 	auto *reply = net->get(req);
-	QObject::connect(reply, &QNetworkReply::finished, [this, reply, net, controller] {
+	QObject::connect(reply, &QNetworkReply::finished, [this, reply, net, weakCtrl] {
+		gSyncing = false;
 		reply->deleteLater();
 		net->deleteLater();
 
-		if (reply->error() != QNetworkReply::NoError) {
-			LOG(("ZenBadges: Remote sync failed: %1").arg(reply->errorString()));
-			if (controller) {
-				controller->show(Ui::MakeInformBox(
-					QString("Не удалось обновить бейджи:\n%1").arg(reply->errorString())));
+		const auto status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+		if (reply->error() != QNetworkReply::NoError || status < 200 || status >= 300) {
+			LOG(("ZenBadges: Remote sync failed (HTTP %1): %2").arg(status).arg(reply->errorString()));
+			if (const auto ctrl = weakCtrl.get()) {
+				ctrl->show(Ui::MakeInformBox(
+					QString::fromUtf8("Не удалось обновить бейджи:\n%1").arg(reply->errorString())));
 			}
 			return;
 		}
@@ -257,14 +272,14 @@ void ZenBadges::syncFromRemote(Window::SessionController *controller) {
 		const auto content = QString::fromUtf8(reply->readAll());
 		if (loadFromJson(content)) {
 			LOG(("ZenBadges: Remote sync successful. Total badges: %1").arg(_badges.size()));
-			if (controller) {
-				controller->show(Ui::MakeInformBox(
-					QString("Бейджи успешно обновлены.\nВсего в реестре: %1").arg(_badges.size())));
+			if (const auto ctrl = weakCtrl.get()) {
+				ctrl->show(Ui::MakeInformBox(
+					QString::fromUtf8("Бейджи успешно обновлены.\nВсего в реестре: %1").arg(_badges.size())));
 			}
 		} else {
-			if (controller) {
-				controller->show(Ui::MakeInformBox(
-					"Ошибка обработки полученного реестра бейджей."));
+			if (const auto ctrl = weakCtrl.get()) {
+				ctrl->show(Ui::MakeInformBox(
+					QString::fromUtf8("Ошибка обработки полученного реестра бейджей.")));
 			}
 		}
 	});

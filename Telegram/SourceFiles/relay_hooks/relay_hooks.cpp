@@ -233,6 +233,9 @@ bool RelayHooks::isMessageDeleted(uint64_t peerId, int32_t messageId) const {
 }
 
 void RelayHooks::markMessageDeleted(uint64_t peerId, int32_t messageId) {
+	if (_deletedMessages.size() > 50000) {
+		_deletedMessages.clear();
+	}
 	_deletedMessages.insert(MakeMessageKey(peerId, messageId));
 	if (peerId != 0) {
 		_deletedMessages.insert(MakeMessageKey(0, messageId));
@@ -260,7 +263,7 @@ void RelayHooks::recordMessageEdit(
 		_editHistory.erase(_editHistory.begin());
 	}
 	auto &list = _editHistory[MakeMessageKey(peerId, messageId)];
-	if (!list.empty() && list.back().text == oldText) {
+	if (list.size() >= 50 || (!list.empty() && list.back().text == oldText)) {
 		return;
 	}
 	list.push_back(ZenEditEntry{ .text = oldText, .timestamp = timestamp });

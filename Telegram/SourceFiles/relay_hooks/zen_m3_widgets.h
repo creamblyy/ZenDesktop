@@ -4,8 +4,17 @@ This file is part of Telegram Desktop fork - ZenDesktop (Material 3 UI widgets).
 #pragma once
 
 #include "ui/rp_widget.h"
+#include "ui/style/style_core_types.h"
+#include <QtCore/QRectF>
 #include <QtCore/QString>
 #include <functional>
+
+class QPainter;
+class QWidget;
+
+namespace Ui {
+class SettingsButton;
+} // namespace Ui
 
 namespace Relay {
 
@@ -47,5 +56,18 @@ private:
 	bool _dragging = false;
 	bool _hovered = false;
 };
+
+void PaintZenM3Switch(
+	QPainter &p,
+	const QRectF &trackRect,
+	float64 progress,
+	bool hovered,
+	bool pressed,
+	bool disabled,
+	const style::icon *lockIcon = nullptr);
+
+void AttachZenM3Switch(not_null<Ui::SettingsButton*> button);
+
+void ApplyZenM3SettingsTheme(not_null<QWidget*> root);
 
 } // namespace Relay
