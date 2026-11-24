@@ -334,6 +334,7 @@ private:
 	void addViewDiscussion();
 	void addDirectMessages();
 	void addToggleTopicClosed();
+	void addJumpToStart();
 	void addExportChat();
 	void addTranslate();
 	void addReport();
@@ -1107,6 +1108,43 @@ void Filler::addExportChat() {
 		tr::lng_profile_export_chat(tr::now),
 		[=] { PeerMenuExportChat(navigation, peer); },
 		&st::menuIconExport);
+}
+
+void Filler::addJumpToStart() {
+	if (!_peer || !_request.key) {
+		return;
+	}
+	const auto chat = _request.key;
+	const auto peer = _peer;
+	const auto weak = base::make_weak(_controller);
+	const auto isSubthread = (_topic != nullptr) || (_sublist != nullptr);
+	const auto weakThread = base::make_weak(_thread);
+	_addAction(
+		QString::fromUtf8("К началу"),
+		[=] {
+			peer->session().api().resolveJumpToTime(
+				chat,
+				TimeId(2),
+				[=](not_null<PeerData*> targetPeer, MsgId id) {
+					if (!id || id == ShowAtUnreadMsgId) {
+						return;
+					}
+					if (const auto strong = weak.get()) {
+						if (!isSubthread) {
+							strong->showPeerHistory(
+								targetPeer,
+								SectionShow::Way::Forward,
+								id);
+						} else if (const auto strongThread = weakThread.get()) {
+							strong->showThread(
+								strongThread,
+								id,
+								SectionShow::Way::Forward);
+						}
+					}
+				});
+		},
+		&st::menuIconRestore);
 }
 
 void Filler::addTranslate() {
@@ -1980,6 +2018,7 @@ void Filler::fillHistoryActions() {
 	addToggleNoForwards();
 	addViewDiscussion();
 	addDirectMessages();
+	addJumpToStart();
 	addExportChat();
 	addTranslate();
 	addReport();
@@ -2025,6 +2064,7 @@ void Filler::fillRepliesActions() {
 		addInfo();
 		addManageTopic();
 	}
+	addJumpToStart();
 	addBoostChat();
 	addCreatePoll();
 	addCreateTodoList();
