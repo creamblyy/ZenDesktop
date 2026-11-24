@@ -7,6 +7,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "mainwindow.h"
 
+#include "relay_hooks/relay_hooks.h"
+
 #include "data/data_document.h"
 #include "data/data_session.h"
 #include "data/data_document_media.h"
@@ -368,7 +370,10 @@ void MainWindow::showSettings() {
 	}
 
 	if (const auto session = sessionController()) {
-		session->showSettings();
+		session->showSettings(
+			Relay::RelayHooks::Instance().isSwissMotionEnabled()
+				? Window::SectionShow(anim::type::instant)
+				: Window::SectionShow());
 	} else {
 		controller().hideLayer(anim::type::instant);
 		showSpecialLayer(
@@ -409,7 +414,9 @@ void MainWindow::showMainMenu() {
 	ensureLayerCreated();
 	_layer->showMainMenu(
 		object_ptr<Window::MainMenu>(body(), sessionController()),
-		anim::type::normal);
+		Relay::RelayHooks::Instance().isSwissMotionEnabled()
+			? anim::type::instant
+			: anim::type::normal);
 }
 
 void MainWindow::ensureLayerCreated() {

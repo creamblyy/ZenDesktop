@@ -2048,12 +2048,14 @@ BlockPart DetailsFiller::makeInfo() {
 		auto p = QPainter(result);
 		p.setRenderHint(QPainter::Antialiasing);
 		if (Relay::RelayHooks::Instance().isMaterial3BubblesEnabled()) {
+			p.fillRect(result->rect(), st::windowBg->c);
 			auto fill = st::windowFg->c;
 			fill.setAlphaF(0.06);
 			p.setPen(Qt::NoPen);
 			constexpr auto kMarginX = 12.0;
 			constexpr auto kOuterR = 16.0;
-			constexpr auto kInnerR = 4.0;
+			constexpr auto kInnerR = 6.0;
+			constexpr auto kGapHalf = 2.5;
 			const auto wTotal = double(result->width());
 			if (wTotal > 2.0 * kMarginX) {
 				for (size_t i = 0; i < rows.size(); ++i) {
@@ -2062,8 +2064,12 @@ BlockPart DetailsFiller::makeInfo() {
 					const auto isLast = (i + 1 == rows.size());
 					const auto x1 = kMarginX;
 					const auto x2 = wTotal - kMarginX;
-					const auto y1 = double(w->y()) + (isFirst ? 1.0 : 1.5);
-					const auto y2 = double(w->y() + w->height()) - (isLast ? 1.0 : 1.5);
+					const auto y1 = isFirst
+						? std::max(0.0, double(w->y()) + 2.0)
+						: (0.5 * (double(rows[i - 1]->y() + rows[i - 1]->height()) + double(w->y())) + kGapHalf);
+					const auto y2 = isLast
+						? std::min(double(result->height()), double(w->y() + w->height()) - 2.0)
+						: (0.5 * (double(w->y() + w->height()) + double(rows[i + 1]->y())) - kGapHalf);
 					if (y2 <= y1 + 4.0) {
 						continue;
 					}
@@ -3722,7 +3728,7 @@ void ApplyM3ProfileButtons(not_null<QWidget*> container) {
 			p.setRenderHint(QPainter::Antialiasing);
 			constexpr auto kMarginX = 12.0;
 			constexpr auto kOuterR = 16.0;
-			constexpr auto kInnerR = 4.0;
+			constexpr auto kInnerR = 6.0;
 			const auto w = double(btn->width());
 			const auto h = double(btn->height());
 			if (w <= 2.0 * kMarginX || h <= 4.0) {
@@ -3730,8 +3736,8 @@ void ApplyM3ProfileButtons(not_null<QWidget*> container) {
 			}
 			const auto x1 = kMarginX;
 			const auto x2 = w - kMarginX;
-			const auto y1 = isFirst ? 0.5 : 1.5;
-			const auto y2 = isLast ? (h - 0.5) : (h - 1.5);
+			const auto y1 = isFirst ? 1.0 : 2.5;
+			const auto y2 = isLast ? (h - 1.0) : (h - 2.5);
 			const auto rt = isFirst ? kOuterR : kInnerR;
 			const auto rb = isLast ? kOuterR : kInnerR;
 

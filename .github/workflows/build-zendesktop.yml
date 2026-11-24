@@ -262,12 +262,25 @@ jobs:
           }
           $touchTime = (Get-Date).AddMinutes(1)
           $hasHeader = $false
+          $hasIconOrStyle = $false
           $diffFiles | ForEach-Object {
               if ($_ -like "*.h") { $hasHeader = $true }
+              if ($_ -like "*.png" -or $_ -like "*.style") { $hasIconOrStyle = $true }
               $fullPath = "tdesktop\$_"
               if (Test-Path $fullPath) {
                   (Get-Item $fullPath).LastWriteTime = $touchTime
                   Write-Host "Marked commit diff for recompilation: $_"
+              }
+          }
+          if ($hasIconOrStyle) {
+              Get-ChildItem -Path "tdesktop\out" -Filter "style_menu_icons.*" -Recurse -File -ErrorAction SilentlyContinue | ForEach-Object {
+                  Remove-Item $_.FullName -Force -ErrorAction SilentlyContinue
+                  Write-Host "Removed cached generated icon style: $($_.Name)"
+              }
+              $menuIconsStyle = "tdesktop\Telegram\SourceFiles\ui\menu_icons.style"
+              if (Test-Path $menuIconsStyle) {
+                  (Get-Item $menuIconsStyle).LastWriteTime = $touchTime
+                  Write-Host "Marked menu_icons.style for codegen_style regeneration"
               }
           }
           if ($hasHeader) {

@@ -891,7 +891,7 @@ void Main::setupContent() {
 				p.setRenderHint(QPainter::Antialiasing);
 				constexpr auto kMarginX = 12.0;
 				constexpr auto kOuterR = 16.0;
-				constexpr auto kInnerR = 4.0;
+				constexpr auto kInnerR = 6.0;
 				const auto w = double(btn->width());
 				const auto h = double(btn->height());
 				if (w <= 2.0 * kMarginX || h <= 4.0) {
@@ -899,8 +899,8 @@ void Main::setupContent() {
 				}
 				const auto x1 = kMarginX;
 				const auto x2 = w - kMarginX;
-				const auto y1 = isFirst ? 0.0 : 1.5;
-				const auto y2 = isLast ? h : (h - 1.5);
+				const auto y1 = isFirst ? 1.0 : 2.5;
+				const auto y2 = isLast ? (h - 1.0) : (h - 2.5);
 				const auto rt = isFirst ? kOuterR : kInnerR;
 				const auto rb = isLast ? kOuterR : kInnerR;
 
@@ -946,7 +946,10 @@ void Main::setupContent() {
 }
 
 void Main::showFinished() {
-	if (_content && Relay::RelayHooks::Instance().isSwissMotionEnabled()) {
+	if (_content
+		&& Relay::RelayHooks::Instance().isSwissMotionEnabled()
+		&& !_content->property("zen_revealed").toBool()) {
+		_content->setProperty("zen_revealed", true);
 		auto *effect = qobject_cast<QGraphicsOpacityEffect*>(_content->graphicsEffect());
 		if (!effect) {
 			effect = new QGraphicsOpacityEffect(_content.data());
@@ -971,7 +974,7 @@ void Main::showFinished() {
 			1.0,
 			220,
 			anim::easeOutCubic);
-	} else if (_content) {
+	} else if (_content && !_revealAnim.animating()) {
 		_content->setGraphicsEffect(nullptr);
 	}
 

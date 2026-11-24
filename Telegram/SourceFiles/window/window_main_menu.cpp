@@ -958,7 +958,10 @@ void MainMenu::setupMenu() {
 		tr::lng_menu_settings(),
 		{ &st::menuIconSettings }
 	)->setClickedCallback([=] {
-		controller->showSettings();
+		controller->showSettings(
+			Relay::RelayHooks::Instance().isSwissMotionEnabled()
+				? Window::SectionShow(anim::type::instant)
+				: Window::SectionShow());
 	});
 
 	_nightThemeToggle = addAction(

@@ -139,6 +139,7 @@ struct ZenTransitionState {
 	int totalMs = 0;
 	int lastWidth = -1;
 	bool navigating = false;
+	bool revealed = false;
 };
 
 void FinishZenReveal(ZenTransitionState *state) {
@@ -197,7 +198,7 @@ void ApplyM3ZenSectionIslands(not_null<Ui::VerticalLayout*> content) {
 				p.setRenderHint(QPainter::Antialiasing);
 				constexpr auto kMarginX = 12.0;
 				constexpr auto kOuterR = 16.0;
-				constexpr auto kInnerR = 4.0;
+				constexpr auto kInnerR = 6.0;
 				const auto w = double(btn->width());
 				const auto h = double(btn->height());
 				if (w <= 2.0 * kMarginX || h <= 4.0) {
@@ -205,8 +206,8 @@ void ApplyM3ZenSectionIslands(not_null<Ui::VerticalLayout*> content) {
 				}
 				const auto x1 = kMarginX;
 				const auto x2 = w - kMarginX;
-				const auto y1 = isFirst ? 0.5 : 0.5;
-				const auto y2 = isLast ? (h - 0.5) : (h - 0.5);
+				const auto y1 = isFirst ? 1.0 : 2.5;
+				const auto y2 = isLast ? (h - 1.0) : (h - 2.5);
 				const auto rt = isFirst ? kOuterR : kInnerR;
 				const auto rb = isLast ? kOuterR : kInnerR;
 
@@ -274,6 +275,10 @@ void AttachZenSectionTransition(
 	}, content->lifetime());
 
 	section->showFinishes() | rpl::on_next([=] {
+		if (state->revealed) {
+			return;
+		}
+		state->revealed = true;
 		state->exitAnimation.stop();
 		state->navigating = false;
 		content->setProperty("zen_navigating", false);
